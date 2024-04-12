@@ -12,7 +12,7 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/gorilla/websocket"
 	"github.com/samuel/go-zookeeper/zk"
-	"github.com/umerfarok/kafka-live-dashbord/config"
+	"github.com/umerfarok/kafka-live-dashboard/config"
 )
 
 var upgrader = websocket.Upgrader{

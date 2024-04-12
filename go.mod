@@ -1,4 +1,4 @@
-module github.com/umerfarok/kafka-live-dashbord
+module github.com/umerfarok/kafka-live-dashboard
 
 go 1.21.0
 
