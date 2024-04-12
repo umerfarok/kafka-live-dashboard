@@ -20,7 +20,7 @@ func NewConfig() (*Config, error) {
 	viper.SetDefault("HTTP_READ_TIMEOUT", 10)
 	viper.SetDefault("HTTP_WRITE_TIMEOUT", 10)
 	viper.SetDefault("HTTP_IDLE_TIMEOUT", 10)
-	viper.SetDefault("HTTP_PORT", "8080")
+	viper.SetDefault("HTTP_PORT", "5001")
 	viper.SetDefault("KAFKA_BROKERS", "localhost:9092")
 	viper.SetDefault("KAFKA_TOPIC", "test-topic")
 	viper.SetDefault("KAFKA_GROUP_ID", "test-group")

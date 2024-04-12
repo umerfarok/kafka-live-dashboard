@@ -151,4 +151,5 @@ func main() {
 	if err := http.ListenAndServe(":"+config.HTTPPort, nil); err != nil {
 		log.Fatalf("ListenAndServe error: %v", err)
 	}
+	
 }
