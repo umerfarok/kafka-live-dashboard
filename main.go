@@ -58,6 +58,15 @@ func NewServer(config *config.Config) (*Server, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if r.URL.Path == "/" {
 		fmt.Fprintf(w, "Hello World")
 		return
@@ -102,18 +111,27 @@ func (s *Server) ServeWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	done := make(chan struct{})
+	defer close(done)
+
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("WebSocket read error:", err)
+			// Check if the error is a "close 1001" error
+			if websocket.IsCloseError(err, websocket.CloseGoingAway) {
+				log.Println("WebSocket closed by the client or server")
+				// Handle the error as needed
+			} else {
+				log.Println("WebSocket read error:", err)
+			}
 			return
 		}
 		topic := string(msg)
-		s.HandleWebSocket(conn, topic)
+		go s.HandleWebSocket(conn, topic, done)
 	}
 }
 
-func (s *Server) HandleWebSocket(conn *websocket.Conn, topic string) {
+func (s *Server) HandleWebSocket(conn *websocket.Conn, topic string, done <-chan struct{}) {
 	consumer, err := sarama.NewConsumerFromClient(s.kafkaConn)
 	if err != nil {
 		log.Println("Failed to create consumer:", err)
@@ -126,15 +144,19 @@ func (s *Server) HandleWebSocket(conn *websocket.Conn, topic string) {
 	}
 	defer partitionConsumer.Close()
 
-	for message := range partitionConsumer.Messages() {
-		err := conn.WriteMessage(websocket.TextMessage, message.Value)
-		if err != nil {
-			log.Println("WebSocket write error:", err)
+	for {
+		select {
+		case message := <-partitionConsumer.Messages():
+			err := conn.WriteMessage(websocket.TextMessage, message.Value)
+			if err != nil {
+				log.Println("WebSocket write error:", err)
+				return
+			}
+		case <-done:
 			return
 		}
 	}
 }
-
 func main() {
 	config, err := config.NewConfig()
 	if err != nil {
@@ -151,5 +173,5 @@ func main() {
 	if err := http.ListenAndServe(":"+config.HTTPPort, nil); err != nil {
 		log.Fatalf("ListenAndServe error: %v", err)
 	}
-	
+
 }
