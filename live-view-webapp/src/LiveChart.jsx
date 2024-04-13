@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
-    Chart,
+    Chart as ChartJS,
     CategoryScale,
     LinearScale,
     PointElement,
@@ -10,8 +10,22 @@ import {
     Tooltip,
     Legend,
 } from 'chart.js/auto';
+import {
+    Container,
+    Typography,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    Paper,
+    Button,
+    Box,
+} from '@mui/material';
 
-Chart.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+
 
 const KafkaDashboard = () => {
     const [clusterStatus, setClusterStatus] = useState(null);
@@ -123,31 +137,80 @@ const KafkaDashboard = () => {
     }
 
     return (
-        <div>
-            <h1>Kafka Dashboard</h1>
-            <h2>Cluster Status</h2>
-            <p>Total Topics: {clusterStatus.TotalTopics}</p>
-            <p>Active Topics: {clusterStatus.ActiveTopics}</p>
-            <p>Total Partitions: {clusterStatus.Partitions}</p>
-            <p>Brokers: {clusterStatus.Brokers.length}</p>
+        <Container maxWidth="lg">
+            <Box my={4}>
+                <Typography variant="h3" component="h1" gutterBottom>
+                    Kafka Dashboard
+                </Typography>
+                <TableContainer component={Paper}>
+                    <Table>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>Total Topics</TableCell>
+                                <TableCell>Active Topics</TableCell>
+                                <TableCell>Total Partitions</TableCell>
+                                <TableCell>Brokers</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            <TableRow>
+                                <TableCell>{clusterStatus.TotalTopics}</TableCell>
+                                <TableCell>{clusterStatus.ActiveTopics}</TableCell>
+                                <TableCell>{clusterStatus.Partitions}</TableCell>
+                                <TableCell>{clusterStatus.Brokers.length}</TableCell>
+                            </TableRow>
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </Box>
 
-            <h2>Topic List</h2>
-            <button onClick={fetchTopicList}>Refresh Topic List</button>
-            <br />
-            <ul>
-                {clusterStatus?.Topics.map((topic) => (
-                    <li key={topic.Name}>
-                        <a href="#" onClick={() => connectWebSocket(topic.Name)}>
-                            {topic.Name}
-                        </a>
-                    </li>
-                ))}
-            </ul>
+            <Box my={4}>
+                <Typography variant="h4" component="h2" gutterBottom>
+                    Topic List
+                </Typography>
+                <Button variant="contained" onClick={fetchTopicList}>
+                    Refresh Topic List
+                </Button>
+                <TableContainer component={Paper}>
+                    <Table>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell>Topic Name</TableCell>
+                                <TableCell>Partitions</TableCell>
+                                <TableCell>Replication</TableCell>
+                                <TableCell>Active</TableCell>
+                                <TableCell>Messages</TableCell>
+                                <TableCell>Lag</TableCell>
+                                <TableCell>Throughput</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {Object.values(clusterStatus.Topics).map((topic) => (
+                                <TableRow
+                                    key={topic.Name}
+                                    onClick={() => connectWebSocket(topic.Name)}
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                    <TableCell>{topic.Name}</TableCell>
+                                    <TableCell>{topic.Partitions}</TableCell>
+                                    <TableCell>{topic.Replication}</TableCell>
+                                    <TableCell>{topic.Active.toString()}</TableCell>
+                                    <TableCell>{topic.Messages}</TableCell>
+                                    <TableCell>{topic.Lag}</TableCell>
+                                    <TableCell>{topic.Throughput.toFixed(2)}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </Box>
 
             {selectedTopic && (
-                <div>
-                    <h2>Topic: {selectedTopic}</h2>
-                    <div style={{ width: '80%', height: '400px' }}>
+                <Box my={4}>
+                    <Typography variant="h4" component="h2" gutterBottom>
+                        Topic: {selectedTopic}
+                    </Typography>
+                    <Box sx={{ width: '80%', height: '400px' }}>
                         {chartData && (
                             <Line
                                 data={chartData}
@@ -167,25 +230,32 @@ const KafkaDashboard = () => {
                                 }}
                             />
                         )}
-                    </div>
-                    <h2>Topic Logs</h2>
-                    <div
-                        style={{
-                            height: '200px',
-                            overflow: 'auto',
-                            border: '1px solid #ccc',
-                            padding: '10px',
-                        }}
-                        ref={logBoxRef}
-                    >
-                        {topicLogs.map((log, index) => (
-                            <div key={index}>{log}</div>
-                        ))}
-                    </div>
-                </div>
+                    </Box>
+                    <Box my={4}>
+                        <Typography variant="h4" component="h2" gutterBottom>
+                            Topic Logs
+                        </Typography>
+                        <Box
+                            sx={{
+                                height: '200px',
+                                overflow: 'auto',
+                                border: '1px solid #ccc',
+                                padding: '10px',
+                            }}
+                            ref={logBoxRef}
+                        >
+                            {topicLogs.map((log, index) => (
+                                <Typography key={index} variant="body1">
+                                    {log}
+                                </Typography>
+                            ))}
+                        </Box>
+                    </Box>
+                </Box>
             )}
-        </div>
+        </Container>
     );
 };
+
 
 export default KafkaDashboard;

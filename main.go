@@ -75,6 +75,8 @@ func NewServer(config *config.Config) (*Server, error) {
 		zkConn:    zkConn,
 	}, nil
 }
+
+
 func (s *Server) startTopicRefresher() {
 	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
@@ -86,6 +88,8 @@ func (s *Server) startTopicRefresher() {
 		}
 	}()
 }
+
+
 func (s *Server) serveTopicMetrics(w http.ResponseWriter, r *http.Request, topicName string) {
 	partitions, replication, active, messages, lag, throughput, err := s.getTopicMetrics(topicName)
 	if err != nil {
