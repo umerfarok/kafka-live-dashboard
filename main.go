@@ -120,6 +120,47 @@ func (s *Server) serveTopicMetrics(w http.ResponseWriter, r *http.Request, topic
 	w.Write(jsonBytes)
 }
 
+func (s *Server) serveTopicMetricsWebSocket(w http.ResponseWriter, r *http.Request, topic string) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer conn.Close()
+
+	for {
+		partitions, replication, active, messages, lag, throughput, err := s.getTopicMetrics(topic)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		topicMetrics := struct {
+			Partitions  int
+			Replication int
+			Active      bool
+			Messages    int64
+			Lag         int64
+			Throughput  float64
+		}{
+			Partitions:  partitions,
+			Replication: replication,
+			Active:      active,
+			Messages:    messages,
+			Lag:         lag,
+			Throughput:  throughput,
+		}
+
+		err = conn.WriteJSON(topicMetrics)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
@@ -139,6 +180,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if strings.HasPrefix(r.URL.Path, "/topics/") {
 		topicName := strings.TrimPrefix(r.URL.Path, "/topics/")
 		s.serveTopicMetrics(w, r, topicName)
+		return
+	} else if strings.HasPrefix(r.URL.Path, "/ws/topics/") {
+		topicName := strings.TrimPrefix(r.URL.Path, "/ws/topics/")
+		s.serveTopicMetricsWebSocket(w, r, topicName)
 		return
 	} else if r.URL.Path == "/ws" {
 		s.serveWebSocket(w, r)
@@ -394,7 +439,6 @@ func (s *Server) getTopicActivityMetrics(topic string) (bool, int64, int64, floa
 
 	return active, totalMessages, totalLag, float64(totalMessages3s) / 3.0, nil
 }
-
 
 func (s *Server) handleWebSocket(conn *websocket.Conn, topic string) {
 	consumer, err := sarama.NewConsumerFromClient(s.kafkaConn)

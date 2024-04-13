@@ -38,6 +38,8 @@ const KafkaDashboard = () => {
     const [topicLogs, setTopicLogs] = useState([]);
     const intervalRef = useRef(null);
     const logBoxRef = useRef(null);
+    const wsRef = useRef(null);
+
 
     useEffect(() => {
         fetchClusterStatus();
@@ -52,12 +54,33 @@ const KafkaDashboard = () => {
 
     useEffect(() => {
         if (selectedTopic) {
-            intervalRef.current = setInterval(() => {
-                fetchTopicMetrics(selectedTopic);
-            }, 3000);
-        } else {
-            clearInterval(intervalRef.current);
+            wsRef.current = new WebSocket(`ws://localhost:5001/ws/topics/${selectedTopic}`);
+    
+            wsRef.current.onmessage = (event) => {
+                console.log('WebSocket message:', event.data)
+                const data = JSON.parse(event.data);
+                setTopicData([
+                    data.Partitions,
+                    data.Replication,
+                    data.Messages,
+                    data.Lag,
+                    data.Throughput,
+                ]);
+            };
+    
+            wsRef.current.onerror = (error) => {
+                console.log(`WebSocket error: ${error}`);
+            };
+            wsRef.current.onopen = () => {
+                console.log('WebSocket connection opened');
+            }
         }
+    
+        return () => {
+            if (wsRef.current) {
+                wsRef.current.close();
+            }
+        };
     }, [selectedTopic]);
 
     useEffect(() => {
@@ -114,6 +137,7 @@ const KafkaDashboard = () => {
     };
 
     const updateChartData = () => {
+        console.log('Updating chart data:', topicData)
         setChartData({
             labels: ['Partitions', 'Replication', 'Messages', 'Lag', 'Throughput'],
             datasets: [
