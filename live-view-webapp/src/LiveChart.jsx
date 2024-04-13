@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Line } from 'react-chartjs-2';
+
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -48,11 +49,12 @@ const KafkaDashboard = () => {
         };
     }, []);
 
+
     useEffect(() => {
         if (selectedTopic) {
             intervalRef.current = setInterval(() => {
                 fetchTopicMetrics(selectedTopic);
-            }, 10000);
+            }, 3000);
         } else {
             clearInterval(intervalRef.current);
         }
@@ -232,24 +234,23 @@ const KafkaDashboard = () => {
                         )}
                     </Box>
                     <Box my={4}>
-                        <Typography variant="h4" component="h2" gutterBottom>
-                            Topic Logs
-                        </Typography>
-                        <Box
+                        <Paper
                             sx={{
                                 height: '200px',
                                 overflow: 'auto',
                                 border: '1px solid #ccc',
                                 padding: '10px',
+                                backgroundColor: '#000',
+                                color: '#0f0',
                             }}
                             ref={logBoxRef}
                         >
                             {topicLogs.map((log, index) => (
-                                <Typography key={index} variant="body1">
-                                    {log}
+                                <Typography key={index} variant="body1" align="left">
+                                    {new Date().toLocaleTimeString()} - {log}
                                 </Typography>
                             ))}
-                        </Box>
+                        </Paper>
                     </Box>
                 </Box>
             )}

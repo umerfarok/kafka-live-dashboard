@@ -76,7 +76,6 @@ func NewServer(config *config.Config) (*Server, error) {
 	}, nil
 }
 
-
 func (s *Server) startTopicRefresher() {
 	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
@@ -88,7 +87,6 @@ func (s *Server) startTopicRefresher() {
 		}
 	}()
 }
-
 
 func (s *Server) serveTopicMetrics(w http.ResponseWriter, r *http.Request, topicName string) {
 	partitions, replication, active, messages, lag, throughput, err := s.getTopicMetrics(topicName)
@@ -363,29 +361,41 @@ func (s *Server) getTopicActivityMetrics(topic string) (bool, int64, int64, floa
 	}
 	defer consumer.Close()
 
-	partitionConsumer, err := consumer.ConsumePartition(topic, 0, sarama.OffsetNewest)
+	partitions, err := consumer.Partitions(topic)
 	if err != nil {
 		return false, 0, 0, 0, err
 	}
-	defer partitionConsumer.Close()
 
 	var totalMessages int64
 	var totalLag int64
-	var totalMessages10s int64
-	for i := 0; i < 10; i++ {
-		select {
-		case message := <-partitionConsumer.Messages():
-			totalMessages++
-			totalLag += message.Offset
-		case <-time.After(1 * time.Second):
-			totalMessages10s = totalMessages
-			totalMessages = 0
-			break
+	var totalMessages3s int64
+	var active bool
+
+	for _, partition := range partitions {
+		partitionConsumer, err := consumer.ConsumePartition(topic, partition, sarama.OffsetNewest)
+		if err != nil {
+			return false, 0, 0, 0, err
+		}
+		defer partitionConsumer.Close()
+
+		for i := 0; i < 3; i++ {
+			select {
+			case message := <-partitionConsumer.Messages():
+				totalMessages++
+				totalLag += message.Offset
+				active = true
+			case <-time.After(1 * time.Second):
+				totalMessages3s = totalMessages
+				totalMessages = 0
+				break
+			}
 		}
 	}
 
-	return totalMessages10s > 0, totalMessages, totalLag, float64(totalMessages10s) / 10.0, nil
+	return active, totalMessages, totalLag, float64(totalMessages3s) / 3.0, nil
 }
+
+
 func (s *Server) handleWebSocket(conn *websocket.Conn, topic string) {
 	consumer, err := sarama.NewConsumerFromClient(s.kafkaConn)
 	if err != nil {
