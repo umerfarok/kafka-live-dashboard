@@ -8,21 +8,21 @@ import (
 )
 
 func (s *Server) ServeKafkaMetrics(w http.ResponseWriter, r *http.Request) {
-	// Get list of brokers
+
 	brokers := s.kafkaConn.Brokers()
 	brokerIDs := make([]int32, len(brokers))
 	for i, broker := range brokers {
 		brokerIDs[i] = broker.ID()
 	}
 
-	// Get list of topics
+
 	topics, err := s.kafkaConn.Topics()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Get details for each topic
+
 	topicDetails := make(map[string]interface{})
 	for _, topic := range topics {
 		partitions, err := s.kafkaConn.Partitions(topic)
@@ -75,13 +75,13 @@ func (s *Server) ServeKafkaMetrics(w http.ResponseWriter, r *http.Request) {
 		topicDetails[topic] = partitionDetails
 	}
 
-	// Prepare response
+
 	response := map[string]interface{}{
 		"brokers": brokerIDs,
 		"topics":  topicDetails,
 	}
 
-	// Send response
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
