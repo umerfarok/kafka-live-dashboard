@@ -137,7 +137,7 @@ const KafkaDashboard = () => {
     };
 
     const updateChartData = () => {
-        console.log('Updating chart data:', topicData)
+   
         setChartData({
             labels: ['Partitions', 'Replication', 'Messages', 'Lag', 'Throughput'],
             datasets: [

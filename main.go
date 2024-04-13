@@ -500,8 +500,23 @@ func main() {
 	}
 
 	http.Handle("/", server)
+	http.HandleFunc("/kafka_metrics", corsMiddleware(server.ServeKafkaMetrics))
 	log.Printf("Starting server on :%s\n", config.HTTPPort)
 	if err := http.ListenAndServe(":"+config.HTTPPort, nil); err != nil {
 		log.Fatalf("ListenAndServe error: %v", err)
+	}
+}
+
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+		if r.Method == "OPTIONS" {
+			return
+		}
+
+		next(w, r)
 	}
 }
