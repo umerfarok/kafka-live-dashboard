@@ -53,7 +53,8 @@ type Server struct {
 	kafkaConn     sarama.Client
 	zkConn        *zk.Conn
 	clusterStatus *ClusterStatus
-	mu            sync.Mutex
+	mu            sync.RWMutex
+	topics        []string
 }
 
 func NewServer(config *config.Config) (*Server, error) {
@@ -74,18 +75,6 @@ func NewServer(config *config.Config) (*Server, error) {
 		kafkaConn: kafkaConn,
 		zkConn:    zkConn,
 	}, nil
-}
-
-func (s *Server) startTopicRefresher() {
-	ticker := time.NewTicker(5 * time.Minute)
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				s.updateClusterStatus()
-			}
-		}
-	}()
 }
 
 func (s *Server) serveTopicMetrics(w http.ResponseWriter, r *http.Request, topicName string) {
@@ -292,6 +281,30 @@ func (s *Server) fetchClusterMetadata() {
 	s.clusterStatus.Partitions = totalPartitions
 	s.clusterStatus.Brokers = brokers
 }
+func (s *Server) updateTopics() {
+	for {
+		children, _, events, err := s.zkConn.ChildrenW("/brokers/topics")
+		if err != nil {
+			log.Println(err)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		s.mu.Lock()
+		s.topics = children
+		s.mu.Unlock()
+
+		select {
+		case event := <-events:
+			if event.Type == zk.EventNodeChildrenChanged {
+				log.Println("Topics changed")
+				continue
+			}
+		case <-time.After(time.Second * 10):
+			continue
+		}
+	}
+}
 
 func (s *Server) getTopics() ([]string, error) {
 	children, _, err := s.zkConn.Children("/brokers/topics")
@@ -307,29 +320,47 @@ func (s *Server) getBrokers() ([]BrokerInfo, error) {
 		return nil, err
 	}
 
-	var brokers []BrokerInfo
-	for _, brokerID := range brokerIDs {
-		data, _, err := s.zkConn.Get(fmt.Sprintf("/brokers/ids/%s", brokerID))
-		if err != nil {
-			return nil, err
-		}
+	var wg sync.WaitGroup
+	brokers := make([]BrokerInfo, len(brokerIDs))
+	errs := make(chan error, len(brokerIDs))
 
-		var broker struct {
-			Timestamp string   `json:"timestamp"`
-			Endpoints []string `json:"endpoints"`
-			Host      string   `json:"host"`
-			Port      int32    `json:"port"`
-			Version   int32    `json:"version"`
-		}
-		if err := json.Unmarshal(data, &broker); err != nil {
-			return nil, err
-		}
+	for i, brokerID := range brokerIDs {
+		wg.Add(1)
+		go func(i int, brokerID string) {
+			defer wg.Done()
 
-		brokers = append(brokers, BrokerInfo{
-			ID:       int32(mustAtoi(brokerID)),
-			Hostname: broker.Host,
-			Port:     broker.Port,
-		})
+			data, _, err := s.zkConn.Get(fmt.Sprintf("/brokers/ids/%s", brokerID))
+			if err != nil {
+				errs <- err
+				return
+			}
+
+			var broker struct {
+				Timestamp string   `json:"timestamp"`
+				Endpoints []string `json:"endpoints"`
+				Host      string   `json:"host"`
+				Port      int32    `json:"port"`
+				Version   int32    `json:"version"`
+			}
+			if err := json.Unmarshal(data, &broker); err != nil {
+				errs <- err
+				return
+			}
+
+			brokers[i] = BrokerInfo{
+				ID:       int32(mustAtoi(brokerID)),
+				Hostname: broker.Host,
+				Port:     broker.Port,
+			}
+		}(i, brokerID)
+	}
+
+	wg.Wait()
+
+	select {
+	case err := <-errs:
+		return nil, err
+	default:
 	}
 
 	return brokers, nil
@@ -494,7 +525,7 @@ func main() {
 	}
 
 	server, err := NewServer(config)
-	server.startTopicRefresher()
+	go server.updateTopics()
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
