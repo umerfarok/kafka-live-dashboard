@@ -21,8 +21,6 @@ func (s *Server) createTestTopicIfRequired() {
 		log.Println("Failed to create Kafka admin client:", err)
 		return
 	}
-	defer admin.Close()
-
 	topicDetail := &sarama.TopicDetail{
 		NumPartitions:     1,
 		ReplicationFactor: 1,

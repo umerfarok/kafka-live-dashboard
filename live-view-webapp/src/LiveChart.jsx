@@ -23,23 +23,24 @@ import {
     Paper,
     Button,
     Box,
+    TextField,
+    Grid,
 } from '@mui/material';
+import KafkaTopicTable from './KafkaTopicTable';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
-
 
 const KafkaDashboard = () => {
     const [clusterStatus, setClusterStatus] = useState(null);
     const [selectedTopic, setSelectedTopic] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
     const [websocket, setWebsocket] = useState(null);
     const [topicData, setTopicData] = useState([]);
-
     const [chartData, setChartData] = useState(null);
     const [topicLogs, setTopicLogs] = useState([]);
     const intervalRef = useRef(null);
     const logBoxRef = useRef(null);
     const wsRef = useRef(null);
-
 
     useEffect(() => {
         fetchClusterStatus();
@@ -51,13 +52,12 @@ const KafkaDashboard = () => {
         };
     }, []);
 
-
     useEffect(() => {
         if (selectedTopic) {
             wsRef.current = new WebSocket(`ws://localhost:5001/ws/topics/${selectedTopic}`);
-    
+
             wsRef.current.onmessage = (event) => {
-                console.log('WebSocket message:', event.data)
+                console.log('WebSocket message:', event.data);
                 const data = JSON.parse(event.data);
                 setTopicData([
                     data.Partitions,
@@ -67,15 +67,15 @@ const KafkaDashboard = () => {
                     data.Throughput,
                 ]);
             };
-    
+
             wsRef.current.onerror = (error) => {
                 console.log(`WebSocket error: ${error}`);
             };
             wsRef.current.onopen = () => {
                 console.log('WebSocket connection opened');
-            }
+            };
         }
-    
+
         return () => {
             if (wsRef.current) {
                 wsRef.current.close();
@@ -94,6 +94,7 @@ const KafkaDashboard = () => {
         const data = await response.json();
         setClusterStatus(data);
     };
+
     const fetchTopicList = async () => {
         const response = await fetch('http://localhost:5001/topics');
         const data = await response.json();
@@ -102,18 +103,6 @@ const KafkaDashboard = () => {
             Topics: data,
         }));
     };
-
-    // const fetchTopicMetrics = async (topic) => {
-    //     const response = await fetch(`http://localhost:5001/topics/${topic}`);
-    //     const data = await response.json();
-    //     setTopicData([
-    //         data.Partitions,
-    //         data.Replication,
-    //         data.Messages,
-    //         data.Lag,
-    //         data.Throughput,
-    //     ]);
-    // };
 
     const connectWebSocket = (topic) => {
         const ws = new WebSocket(`ws://localhost:5001/ws?topic=${topic}`);
@@ -137,7 +126,6 @@ const KafkaDashboard = () => {
     };
 
     const updateChartData = () => {
-   
         setChartData({
             labels: ['Partitions', 'Replication', 'Messages', 'Lag'],
             datasets: [
@@ -163,8 +151,9 @@ const KafkaDashboard = () => {
     }
 
     return (
-        <Container maxWidth="lg">
-            <Box my={4}>
+        <Grid container item xs= {12}>
+        <Container maxWidth={false} sx={{ maxWidth: '100%' }}>
+            <Box my={6}>
                 <Typography variant="h3" component="h1" gutterBottom>
                     Kafka Dashboard
                 </Typography>
@@ -190,49 +179,26 @@ const KafkaDashboard = () => {
                 </TableContainer>
             </Box>
 
-            <Box my={4}>
+            <Box my={8}>
                 <Typography variant="h4" component="h2" gutterBottom>
                     Topic List
                 </Typography>
                 <Button variant="contained" onClick={fetchTopicList}>
                     Refresh Topic List
                 </Button>
-                <TableContainer component={Paper}>
-                    <Table>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Topic Name</TableCell>
-                                <TableCell>Partitions</TableCell>
-                                <TableCell>Replication</TableCell>
-                                <TableCell>Active</TableCell>
-                                <TableCell>Messages</TableCell>
-                                <TableCell>Lag</TableCell>
-                                <TableCell>Throughput</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {Object.values(clusterStatus.Topics).map((topic) => (
-                                <TableRow
-                                    key={topic.Name}
-                                    onClick={() => connectWebSocket(topic.Name)}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <TableCell>{topic.Name}</TableCell>
-                                    <TableCell>{topic.Partitions}</TableCell>
-                                    <TableCell>{topic.Replication}</TableCell>
-                                    <TableCell>{topic.Active.toString()}</TableCell>
-                                    <TableCell>{topic.Messages}</TableCell>
-                                    <TableCell>{topic.Lag}</TableCell>
-                                    <TableCell>{topic.Throughput.toFixed(2)}</TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
+                <TextField
+                    label="Search Topics"
+                    variant="outlined"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    fullWidth
+                    style={{ marginBottom: '16px' }}
+                />
+                <KafkaTopicTable onRowClick={connectWebSocket} topics={Object.values(clusterStatus?.Topics || {})} searchTerm={searchTerm} connectWebSocket={connectWebSocket} />
             </Box>
 
             {selectedTopic && (
-                <Box my={4}>
+                <Box my={8}>
                     <Typography variant="h4" component="h2" gutterBottom>
                         Topic: {selectedTopic}
                     </Typography>
@@ -257,7 +223,7 @@ const KafkaDashboard = () => {
                             />
                         )}
                     </Box>
-                    <Box my={4}>
+                    <Box my={8} sx={{ maxWidth: '100%' }}>
                         <Paper
                             sx={{
                                 height: '200px',
@@ -279,8 +245,8 @@ const KafkaDashboard = () => {
                 </Box>
             )}
         </Container>
+        </Grid>
     );
 };
-
 
 export default KafkaDashboard;
