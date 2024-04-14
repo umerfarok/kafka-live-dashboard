@@ -151,30 +151,41 @@ const KafkaDashboard = () => {
         }
     };
 
-    const getRandomColor = () => {
-        const letters = '0123456789ABCDEF';
-        let color = '#';
-        for (let i = 0; i < 6; i++) {
-            color += letters[Math.floor(Math.random() * 16)];
-        }
-        return color;
-    };
-    
     const updateChartData = () => {
-        const newColor = getRandomColor();
-    
         setChartData({
             labels: ['Partitions', 'Replication', 'Messages', 'Lag'],
             datasets: [
                 {
                     label: `Topic: ${selectedTopic}`,
                     data: topicData,
-                    backgroundColor: `${newColor}33`, // 33 is for 20% opacity in hex
-                    borderColor: newColor,
-                    borderWidth: 1,
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 3,
                 },
             ],
         });
+    
+        setTimeout(() => {
+            setChartData((prevData) => ({
+                ...prevData,
+                datasets: prevData.datasets.map((dataset) => ({
+                    ...dataset,
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent',
+                })),
+            }));
+        }, 500);
+    
+        setTimeout(() => {
+            setChartData((prevData) => ({
+                ...prevData,
+                datasets: prevData.datasets.map((dataset) => ({
+                    ...dataset,
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                })),
+            }));
+        }, 1000);
     };
 
     const scrollLogBox = () => {
