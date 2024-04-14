@@ -1,6 +1,5 @@
 import { BrowserRouter as Router, Route, Routes, Link as RouterLink } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
-import './App.css'
 import LiveKafkaDashbord from './LiveChart.jsx'
 import KafkaMetrics from './cluster-metrics.jsx';
 
