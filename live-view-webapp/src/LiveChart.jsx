@@ -103,17 +103,17 @@ const KafkaDashboard = () => {
         }));
     };
 
-    const fetchTopicMetrics = async (topic) => {
-        const response = await fetch(`http://localhost:5001/topics/${topic}`);
-        const data = await response.json();
-        setTopicData([
-            data.Partitions,
-            data.Replication,
-            data.Messages,
-            data.Lag,
-            data.Throughput,
-        ]);
-    };
+    // const fetchTopicMetrics = async (topic) => {
+    //     const response = await fetch(`http://localhost:5001/topics/${topic}`);
+    //     const data = await response.json();
+    //     setTopicData([
+    //         data.Partitions,
+    //         data.Replication,
+    //         data.Messages,
+    //         data.Lag,
+    //         data.Throughput,
+    //     ]);
+    // };
 
     const connectWebSocket = (topic) => {
         const ws = new WebSocket(`ws://localhost:5001/ws?topic=${topic}`);
@@ -139,7 +139,7 @@ const KafkaDashboard = () => {
     const updateChartData = () => {
    
         setChartData({
-            labels: ['Partitions', 'Replication', 'Messages', 'Lag', 'Throughput'],
+            labels: ['Partitions', 'Replication', 'Messages', 'Lag'],
             datasets: [
                 {
                     label: `Topic: ${selectedTopic}`,

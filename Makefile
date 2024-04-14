@@ -1,11 +1,12 @@
-.PHONY: build-mac build-windows run clean test fmt vet build
-
 build-mac:
-	GOOS=darwin GOARCH=amd64 go build -o live-api-mac
+	set GOOS=darwin && set GOARCH=amd64 && go build -o live-api-mac
 
 build-windows:
-	GOOS=windows GOARCH=amd64 go build -o live-api-windows.exe
+	cmd /C "(set GOOS=windows && set GOARCH=amd64 && go build -o live-api-windows.exe)"
 
+
+build:
+	go build -o ./live-api-kafka/live-api-kafka 
 run:
 	go run .
 
@@ -20,5 +21,3 @@ fmt:
 
 vet:
 	go vet ./...
-
-build: build-mac build-windows

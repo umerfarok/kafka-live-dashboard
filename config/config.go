@@ -1,6 +1,9 @@
 package config
 
 import (
+	"log"
+
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -14,9 +17,14 @@ type Config struct {
 	HTTPWriteTimeout int
 	HTTPIdleTimeout  int
 	ZookeeperNodes   string
+	CreateTestTopic  bool
 }
 
 func NewConfig() (*Config, error) {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found")
+	}
+
 	viper.SetDefault("HTTP_READ_TIMEOUT", 10)
 	viper.SetDefault("HTTP_WRITE_TIMEOUT", 10)
 	viper.SetDefault("HTTP_IDLE_TIMEOUT", 10)
@@ -26,6 +34,7 @@ func NewConfig() (*Config, error) {
 	viper.SetDefault("KAFKA_GROUP_ID", "test-group")
 	viper.SetDefault("KAFKA_OFFSET", "latest")
 	viper.SetDefault("ZOOKEEPER_NODES", "localhost:2181")
+	viper.SetDefault("CREATE_TEST_TOPIC", false)
 
 	viper.AutomaticEnv()
 
@@ -39,5 +48,6 @@ func NewConfig() (*Config, error) {
 		HTTPWriteTimeout: viper.GetInt("HTTP_WRITE_TIMEOUT"),
 		HTTPIdleTimeout:  viper.GetInt("HTTP_IDLE_TIMEOUT"),
 		ZookeeperNodes:   viper.GetString("ZOOKEEPER_NODES"),
+		CreateTestTopic:  viper.GetBool("CREATE_TEST_TOPIC"),
 	}, nil
 }

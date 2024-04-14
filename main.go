@@ -161,20 +161,25 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Path == "/" {
+		log.Println("Serving / cluster status")
 		s.serveClusterStatus(w, r)
 		return
 	} else if r.URL.Path == "/topics" {
+		log.Println("Serving /topics topic list")
 		s.serveTopicList(w, r)
 		return
 	} else if strings.HasPrefix(r.URL.Path, "/topics/") {
+		log.Println("Serving /topics/<topic> topic metrics")
 		topicName := strings.TrimPrefix(r.URL.Path, "/topics/")
 		s.serveTopicMetrics(w, r, topicName)
 		return
 	} else if strings.HasPrefix(r.URL.Path, "/ws/topics/") {
+		log.Println("Serving /ws/topics/<topic> topic metrics websocket")
 		topicName := strings.TrimPrefix(r.URL.Path, "/ws/topics/")
 		s.serveTopicMetricsWebSocket(w, r, topicName)
 		return
 	} else if r.URL.Path == "/ws" {
+		log.Println("Serving /ws websocket")
 		s.serveWebSocket(w, r)
 		return
 	}
@@ -429,7 +434,6 @@ func (s *Server) getReplicationFactor(topic string) (int, error) {
 	}
 	return 0, nil
 }
-
 func (s *Server) getTopicActivityMetrics(topic string) (bool, int64, int64, float64, error) {
 	consumer, err := sarama.NewConsumerFromClient(s.kafkaConn)
 	if err != nil {
@@ -444,31 +448,49 @@ func (s *Server) getTopicActivityMetrics(topic string) (bool, int64, int64, floa
 
 	var totalMessages int64
 	var totalLag int64
-	var totalMessages3s int64
 	var active bool
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
+	// Get the initial newest offsets
+	initialNewestOffsets := make(map[int32]int64)
 	for _, partition := range partitions {
-		partitionConsumer, err := consumer.ConsumePartition(topic, partition, sarama.OffsetNewest)
+		newestOffset, err := s.kafkaConn.GetOffset(topic, partition, sarama.OffsetNewest)
 		if err != nil {
 			return false, 0, 0, 0, err
 		}
-		defer partitionConsumer.Close()
-
-		for i := 0; i < 3; i++ {
-			select {
-			case message := <-partitionConsumer.Messages():
-				totalMessages++
-				totalLag += message.Offset
-				active = true
-			case <-time.After(1 * time.Second):
-				totalMessages3s = totalMessages
-				totalMessages = 0
-				break
-			}
-		}
+		initialNewestOffsets[partition] = newestOffset
 	}
 
-	return active, totalMessages, totalLag, float64(totalMessages3s) / 3.0, nil
+	for _, partition := range partitions {
+		wg.Add(1)
+		go func(partition int32) {
+			defer wg.Done()
+
+			oldestOffset, err := s.kafkaConn.GetOffset(topic, partition, sarama.OffsetOldest)
+			if err != nil {
+				return
+			}
+
+			newestOffset, err := s.kafkaConn.GetOffset(topic, partition, sarama.OffsetNewest)
+			if err != nil {
+				return
+			}
+
+			mu.Lock()
+			totalLag += newestOffset - oldestOffset
+			totalMessages += newestOffset - oldestOffset
+			if newestOffset > initialNewestOffsets[partition] {
+				active = true
+			}
+			mu.Unlock()
+
+		}(partition)
+	}
+
+	wg.Wait()
+
+	return active, totalMessages, totalLag, float64(totalMessages), nil
 }
 
 func (s *Server) handleWebSocket(conn *websocket.Conn, topic string) {
@@ -510,6 +532,7 @@ func (s *Server) handleWebSocket(conn *websocket.Conn, topic string) {
 		}
 	}
 }
+
 func mustAtoi(s string) int {
 	i, err := strconv.Atoi(s)
 	if err != nil {
@@ -529,7 +552,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
-
+	server.createTestTopicIfRequired()
 	http.Handle("/", server)
 	http.HandleFunc("/kafka_metrics", corsMiddleware(server.ServeKafkaMetrics))
 	log.Printf("Starting server on :%s\n", config.HTTPPort)

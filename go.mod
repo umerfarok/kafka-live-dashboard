@@ -5,6 +5,7 @@ go 1.21.0
 require (
 	github.com/IBM/sarama v1.43.1
 	github.com/gorilla/websocket v1.5.1
+	github.com/joho/godotenv v1.5.1
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414
 	github.com/spf13/viper v1.18.2
 )
