@@ -164,7 +164,7 @@ const KafkaDashboard = () => {
                 },
             ],
         });
-    
+
         setTimeout(() => {
             setChartData((prevData) => ({
                 ...prevData,
@@ -175,7 +175,7 @@ const KafkaDashboard = () => {
                 })),
             }));
         }, 500);
-    
+
         setTimeout(() => {
             setChartData((prevData) => ({
                 ...prevData,
@@ -206,17 +206,17 @@ const KafkaDashboard = () => {
         <Grid container item xs={12}>
             <Container maxWidth={false} sx={{ maxWidth: '100%' }}>
                 <Box my={6}>
-                    <Typography variant="h3" component="h1" gutterBottom>
-                        Kafka Dashboard
+                    <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 12 }}>
+                        KAFKA DASHBOARD
                     </Typography>
                     <TableContainer component={Paper}>
                         <Table>
                             <TableHead>
                                 <TableRow>
-                                    <TableCell>Total Topics</TableCell>
-                                    <TableCell>Active Topics</TableCell>
-                                    <TableCell>Total Partitions</TableCell>
-                                    <TableCell>Brokers</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Total Topics</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Active Topics</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Total Partitions</TableCell>
+                                    <TableCell sx={{ fontWeight: 'bold' }}>Brokers</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -232,19 +232,21 @@ const KafkaDashboard = () => {
                 </Box>
 
                 <Box my={8}>
-                    <Typography variant="h4" component="h2" gutterBottom>
-                        Topic List
-                    </Typography>
-                    <Button variant="contained" onClick={fetchTopicList}>
-                        Refresh Topic List
-                    </Button>
+                    <div style={{ display: 'flex', width: '600px', justifyContent: 'space-between', height: '40px', marginBottom: '10px' }}>
+                        <Typography variant="h4" component="h2" gutterBottom>
+                            Topic List
+                        </Typography>
+                        <Button variant="contained" onClick={fetchTopicList}>
+                            Refresh Topic List
+                        </Button>
+                    </div>
                     <TextField
                         label="Search Topics"
                         variant="outlined"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         fullWidth
-                        style={{ marginBottom: '16px' }}
+                        style={{ marginBottom: '16px', width: '600px' }}
                     />
                     <KafkaTopicTable onRowClick={connectWebSocket} topics={Object.values(clusterStatus?.Topics || {})} searchTerm={searchTerm} connectWebSocket={connectWebSocket} />
                 </Box>

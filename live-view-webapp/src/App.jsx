@@ -1,7 +1,12 @@
-import { BrowserRouter as Router, Route, Routes, Link as RouterLink } from 'react-router-dom';
-import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
-import LiveKafkaDashbord from './LiveChart.jsx'
-import KafkaMetrics from './cluster-metrics.jsx';
+import {
+  BrowserRouter as Router,
+  Route,
+  Routes,
+  Link as RouterLink,
+} from "react-router-dom";
+import { AppBar, Toolbar, Typography, Button, Box } from "@mui/material";
+import LiveKafkaDashbord from "./LiveChart.jsx";
+import KafkaMetrics from "./cluster-metrics.jsx";
 
 function App() {
   return (
@@ -11,9 +16,31 @@ function App() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Kafka Dashboard
           </Typography>
-          <Box display="flex" justifyContent="space-between" width="30%">
-            <Button color="inherit" component={RouterLink} to="/live-kafka-dashboard">Live Kafka Dashboard</Button>
-            <Button color="inherit" component={RouterLink} to="/kafka-metrics">Kafka Metrics</Button>
+          <Box display="flex" justifyContent="space-around" width="30%">
+            <Button
+              color="inherit"
+              component={RouterLink}
+              to="/live-kafka-dashboard"
+              sx={{
+                border: "1px solid transparent",
+                borderRadius: "5px",
+                "&:hover": { border: "1px solid white" },
+              }}
+            >
+              Live Kafka Dashboard
+            </Button>
+            <Button
+              color="inherit"
+              component={RouterLink}
+              to="/kafka-metrics"
+              sx={{
+                border: "1px solid transparent",
+                borderRadius: "5px",
+                "&:hover": { border: "1px solid white" },
+              }}
+            >
+              Kafka Metrics
+            </Button>
           </Box>
         </Toolbar>
       </AppBar>
