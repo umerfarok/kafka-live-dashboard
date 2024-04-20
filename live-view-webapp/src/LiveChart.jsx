@@ -252,7 +252,8 @@ const KafkaDashboard = () => {
                 </Box>
 
                 {selectedTopic && (
-                    <Box my={8}>
+                    <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column' }} 
+                    >
                         <Typography variant="h4" component="h2" gutterBottom>
                             Topic: {selectedTopic}
                         </Typography>
@@ -282,7 +283,7 @@ const KafkaDashboard = () => {
                                 Topic Live Messages
                             </Typography>
                         </Typography>
-                        <Box my={8} sx={{ maxWidth: '100%' }}>
+                        <Box my={8} sx={{ maxWidth: '800px' }}>
                             <Paper
                                 sx={{
                                     height: '200px',

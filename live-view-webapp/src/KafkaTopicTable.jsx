@@ -51,7 +51,7 @@ const KafkaTopicTable = ({ topics, searchTerm, onRowClick }) => {
     };
 
     return (
-        <div className="ag-theme-material" style={{ width: '100%', height: 'calc(100vh - 200px)' }}>
+        <div className="ag-theme-material" style={{ width: '100%', height: 'calc(100vh - 500px)' }}>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
                 <Button variant="contained" onClick={handleResetFilters}>
                     Reset Filters
