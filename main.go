@@ -48,6 +48,12 @@ type BrokerInfo struct {
 	Port     int32
 }
 
+type TopicConfig struct {
+	Name        string `json:"name"`
+	Partitions  int    `json:"partitions"`
+	Replication int    `json:"replication"`
+}
+
 type Server struct {
 	config        *config.Config
 	kafkaConn     sarama.Client
@@ -60,6 +66,14 @@ type Server struct {
 func NewServer(config *config.Config) (*Server, error) {
 	kafkaConfig := sarama.NewConfig()
 	kafkaConfig.Version = sarama.V2_6_0_0
+
+	if config.UseSASL {
+		kafkaConfig.Net.SASL.Enable = true
+		kafkaConfig.Net.SASL.User = config.KafkaUsername
+		kafkaConfig.Net.SASL.Password = config.KafkaPassword
+		kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+	}
+
 	kafkaConn, err := sarama.NewClient(strings.Split(config.KafkaBrokers, ","), kafkaConfig)
 	if err != nil {
 		return nil, err
@@ -160,31 +174,120 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.URL.Path == "/" {
-		log.Println("Serving / cluster status")
+	switch {
+	case r.URL.Path == "/":
 		s.serveClusterStatus(w, r)
-		return
-	} else if r.URL.Path == "/topics" {
-		log.Println("Serving /topics topic list")
+	case r.URL.Path == "/topics" && r.Method == "GET":
 		s.serveTopicList(w, r)
-		return
-	} else if strings.HasPrefix(r.URL.Path, "/topics/") {
-		log.Println("Serving /topics/<topic> topic metrics")
+	case r.URL.Path == "/topics" && r.Method == "POST":
+		s.createTopic(w, r)
+	case strings.HasPrefix(r.URL.Path, "/topics/") && r.Method == "DELETE":
+		s.deleteTopic(w, r)
+	case strings.HasPrefix(r.URL.Path, "/topics/"):
 		topicName := strings.TrimPrefix(r.URL.Path, "/topics/")
 		s.serveTopicMetrics(w, r, topicName)
-		return
-	} else if strings.HasPrefix(r.URL.Path, "/ws/topics/") {
-		log.Println("Serving /ws/topics/<topic> topic metrics websocket")
+	case r.URL.Path == "/consumer-groups":
+		s.serveConsumerGroups(w, r)
+	case strings.HasPrefix(r.URL.Path, "/ws/topics/"):
 		topicName := strings.TrimPrefix(r.URL.Path, "/ws/topics/")
 		s.serveTopicMetricsWebSocket(w, r, topicName)
-		return
-	} else if r.URL.Path == "/ws" {
-		log.Println("Serving /ws websocket")
+	case r.URL.Path == "/ws":
 		s.serveWebSocket(w, r)
+	case r.URL.Path == "/kafka_metrics":
+		s.ServeKafkaMetrics(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
+	var config TopicConfig
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	http.NotFound(w, r)
+	admin, err := sarama.NewClusterAdmin(strings.Split(s.config.KafkaBrokers, ","), s.kafkaConn.Config())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create admin client: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer admin.Close()
+
+	err = admin.CreateTopic(config.Name, &sarama.TopicDetail{
+		NumPartitions:     int32(config.Partitions),
+		ReplicationFactor: int16(config.Replication),
+	}, false)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create topic: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (s *Server) deleteTopic(w http.ResponseWriter, r *http.Request) {
+	topicName := strings.TrimPrefix(r.URL.Path, "/topics/")
+
+	admin, err := sarama.NewClusterAdmin(strings.Split(s.config.KafkaBrokers, ","), s.kafkaConn.Config())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create admin client: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer admin.Close()
+
+	err = admin.DeleteTopic(topicName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to delete topic: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) serveConsumerGroups(w http.ResponseWriter, r *http.Request) {
+	admin, err := sarama.NewClusterAdmin(strings.Split(s.config.KafkaBrokers, ","), s.kafkaConn.Config())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create admin client: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer admin.Close()
+
+	groups, err := admin.ListConsumerGroups()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to list consumer groups: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	groupDetails := make(map[string]interface{})
+	for group := range groups {
+		description, err := admin.DescribeConsumerGroups([]string{group})
+		if err != nil {
+			continue
+		}
+
+		members := make(map[string]interface{})
+		for _, member := range description[0].Members {
+			metadata, err := member.GetMemberMetadata()
+			if err != nil {
+				continue
+			}
+
+			members[member.ClientId] = map[string]interface{}{
+				"topics":     metadata.Topics,
+				"userdata":   string(metadata.UserData),
+				"clientHost": member.ClientHost,
+			}
+		}
+
+		groupDetails[group] = map[string]interface{}{
+			"state":   description[0].State,
+			"members": members,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(groupDetails)
 }
 
 func (s *Server) serveClusterStatus(w http.ResponseWriter, r *http.Request) {
@@ -377,34 +480,82 @@ func (s *Server) getTopicMetrics(topic string) (int, int, bool, int64, int64, fl
 
 	var partitions int
 	var replication int
-	var active bool
-	var messages int64
-	var lag int64
-	var throughput float64
-	var err error
+	var activityErr, partitionsErr, replicationErr error
 
 	go func() {
 		defer wg.Done()
-		partitions, err = s.getPartitionCount(topic)
+		partitions, partitionsErr = s.getPartitionCount(topic)
 	}()
 
 	go func() {
 		defer wg.Done()
-		replication, err = s.getReplicationFactor(topic)
+		replication, replicationErr = s.getReplicationFactor(topic)
 	}()
+
+	var activityActive bool
+	var activityMessages int64
+	var activityLag int64
+	var activityThroughput float64
 
 	go func() {
 		defer wg.Done()
-		active, messages, lag, throughput, err = s.getTopicActivityMetrics(topic)
+		activityActive, activityMessages, activityLag, activityThroughput, activityErr = s.getTopicActivityMetrics(topic)
 	}()
 
 	wg.Wait()
 
+	if partitionsErr != nil {
+		return 0, 0, false, 0, 0, 0, partitionsErr
+	}
+	if replicationErr != nil {
+		return 0, 0, false, 0, 0, 0, replicationErr
+	}
+	if activityErr != nil {
+		return 0, 0, false, 0, 0, 0, activityErr
+	}
+
+	// Get all partitions for the topic
+	allPartitions, err := s.kafkaConn.Partitions(topic)
 	if err != nil {
 		return 0, 0, false, 0, 0, 0, err
 	}
 
-	return partitions, replication, active, messages, lag, throughput, nil
+	// Add consumer group lag calculation
+	admin, err := sarama.NewClusterAdmin(strings.Split(s.config.KafkaBrokers, ","), s.kafkaConn.Config())
+	if err != nil {
+		return 0, 0, false, 0, 0, 0, err
+	}
+	defer admin.Close()
+
+	groups, err := admin.ListConsumerGroups()
+	if err != nil {
+		return 0, 0, false, 0, 0, 0, err
+	}
+
+	var totalLag int64
+	for group := range groups {
+		offsetFetch, err := admin.ListConsumerGroupOffsets(group, map[string][]int32{
+			topic: allPartitions,
+		})
+		if err != nil {
+			continue
+		}
+
+		for partition, offset := range offsetFetch.Blocks[topic] {
+			if offset.Offset != -1 {
+				newestOffset, err := s.kafkaConn.GetOffset(topic, partition, sarama.OffsetNewest)
+				if err != nil {
+					continue
+				}
+				totalLag += newestOffset - offset.Offset
+			}
+		}
+	}
+
+	// Combine activity metrics with consumer group lag
+	totalLag += activityLag
+
+	return partitions, replication, activityActive, activityMessages, totalLag, activityThroughput, nil
 }
 
 func (s *Server) getPartitionCount(topic string) (int, error) {
@@ -548,6 +699,10 @@ func main() {
 	}
 
 	server, err := NewServer(config)
+	if err != nil {
+		log.Fatalf("Failed to create server: %v", err)
+	}
+
 	go server.updateTopics()
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
@@ -555,6 +710,7 @@ func main() {
 	server.createTestTopicIfRequired()
 	http.Handle("/", server)
 	http.HandleFunc("/kafka_metrics", corsMiddleware(server.ServeKafkaMetrics))
+
 	log.Printf("Starting server on :%s\n", config.HTTPPort)
 	if err := http.ListenAndServe(":"+config.HTTPPort, nil); err != nil {
 		log.Fatalf("ListenAndServe error: %v", err)

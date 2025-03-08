@@ -14,7 +14,7 @@ import {
 import {
     Container,
     Typography,
-    Table,
+    Table, 
     TableBody,
     TableCell,
     TableContainer,
@@ -27,8 +27,18 @@ import {
     Grid,
     Snackbar,
     Alert,
+    IconButton,
+    useTheme,
+    Switch,
+    FormControlLabel,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
 } from '@mui/material';
+import { Delete, Add, Edit, Refresh, DarkMode, LightMode } from '@mui/icons-material';
 import KafkaTopicTable from './KafkaTopicTable';
+import { API_URL } from './config';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -42,9 +52,13 @@ const KafkaDashboard = () => {
     const [topicLogs, setTopicLogs] = useState([]);
     const [error, setError] = useState(null);
     const [showError, setShowError] = useState(false);
+    const [darkMode, setDarkMode] = useState(false);
+    const [openDialog, setOpenDialog] = useState(false);
+    const [newTopic, setNewTopic] = useState({ name: '', partitions: 1, replication: 1 });
     const intervalRef = useRef(null);
     const logBoxRef = useRef(null);
     const wsRef = useRef(null);
+    const theme = useTheme();
 
     useEffect(() => {
         fetchClusterStatus();
@@ -58,7 +72,7 @@ const KafkaDashboard = () => {
 
     useEffect(() => {
         if (selectedTopic) {
-            wsRef.current = new WebSocket(`ws://localhost:5001/ws/topics/${selectedTopic}`);
+            wsRef.current = new WebSocket(`${API_URL.replace('http', 'ws')}/ws/topics/${selectedTopic}`);
 
             wsRef.current.onmessage = (event) => {
                 console.log('WebSocket message:', event.data);
@@ -97,7 +111,7 @@ const KafkaDashboard = () => {
 
     const fetchClusterStatus = async () => {
         try {
-            const response = await fetch('http://localhost:5001/');
+            const response = await fetch(`${API_URL}/`);
             const data = await response.json();
             setClusterStatus(data);
         } catch (error) {
@@ -109,7 +123,7 @@ const KafkaDashboard = () => {
 
     const fetchTopicList = async () => {
         try {
-            const response = await fetch('http://localhost:5001/topics');
+            const response = await fetch(`${API_URL}/topics`);
             const data = await response.json();
             setClusterStatus((prevStatus) => ({
                 ...prevStatus,
@@ -124,7 +138,7 @@ const KafkaDashboard = () => {
 
     const connectWebSocket = (topic) => {
         try {
-            const ws = new WebSocket(`ws://localhost:5001/ws?topic=${topic}`);
+            const ws = new WebSocket(`${API_URL.replace('http', 'ws')}/ws?topic=${topic}`);
             ws.onopen = () => {
                 console.log('WebSocket connection opened');
             };
@@ -198,6 +212,35 @@ const KafkaDashboard = () => {
         setShowError(false);
     };
 
+    const handleCreateTopic = async () => {
+        try {
+            const response = await fetch(`${API_URL}/topics`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newTopic),
+            });
+            if (!response.ok) throw new Error('Failed to create topic');
+            fetchTopicList();
+            setOpenDialog(false);
+        } catch (error) {
+            setError(error.message);
+            setShowError(true);
+        }
+    };
+
+    const handleDeleteTopic = async (topicName) => {
+        try {
+            const response = await fetch(`${API_URL}/topics/${topicName}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete topic');
+            fetchTopicList();
+        } catch (error) {
+            setError(error.message);
+            setShowError(true);
+        }
+    };
+
     if (!clusterStatus) {
         return <div>Loading...</div>;
     }
@@ -205,10 +248,23 @@ const KafkaDashboard = () => {
     return (
         <Grid container item xs={12}>
             <Container maxWidth={false} sx={{ maxWidth: '100%' }}>
-                <Box my={6}>
+                <Box my={6} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 12 }}>
                         KAFKA DASHBOARD
                     </Typography>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={darkMode}
+                                onChange={(e) => setDarkMode(e.target.checked)}
+                                color="primary"
+                            />
+                        }
+                        label={darkMode ? <DarkMode /> : <LightMode />}
+                    />
+                </Box>
+
+                <Paper elevation={3} sx={{ p: 3, mb: 4, backgroundColor: darkMode ? '#1e1e1e' : '#fff' }}>
                     <TableContainer component={Paper}>
                         <Table>
                             <TableHead>
@@ -229,26 +285,73 @@ const KafkaDashboard = () => {
                             </TableBody>
                         </Table>
                     </TableContainer>
-                </Box>
+                </Paper>
 
                 <Box my={8}>
-                    <div style={{ display: 'flex', width: '600px', justifyContent: 'space-between', height: '40px', marginBottom: '10px' }}>
-                        <Typography variant="h4" component="h2" gutterBottom>
-                            Topic List
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <Typography variant="h4" component="h2">
+                            Topic Management
                         </Typography>
-                        <Button variant="contained" onClick={fetchTopicList}>
-                            Refresh Topic List
-                        </Button>
+                        <div>
+                            <IconButton onClick={() => setOpenDialog(true)} color="primary">
+                                <Add />
+                            </IconButton>
+                            <IconButton onClick={fetchTopicList} color="primary">
+                                <Refresh />
+                            </IconButton>
+                        </div>
                     </div>
+                    
+                    <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+                        <DialogTitle>Create New Topic</DialogTitle>
+                        <DialogContent>
+                            <TextField
+                                autoFocus
+                                margin="dense"
+                                label="Topic Name"
+                                fullWidth
+                                value={newTopic.name}
+                                onChange={(e) => setNewTopic({ ...newTopic, name: e.target.value })}
+                            />
+                            <TextField
+                                margin="dense"
+                                label="Partitions"
+                                type="number"
+                                fullWidth
+                                value={newTopic.partitions}
+                                onChange={(e) => setNewTopic({ ...newTopic, partitions: parseInt(e.target.value) })}
+                            />
+                            <TextField
+                                margin="dense"
+                                label="Replication Factor"
+                                type="number"
+                                fullWidth
+                                value={newTopic.replication}
+                                onChange={(e) => setNewTopic({ ...newTopic, replication: parseInt(e.target.value) })}
+                            />
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+                            <Button onClick={handleCreateTopic} variant="contained">Create</Button>
+                        </DialogActions>
+                    </Dialog>
+
                     <TextField
                         label="Search Topics"
                         variant="outlined"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         fullWidth
-                        style={{ marginBottom: '16px', width: '600px' }}
+                        sx={{ mb: 2 }}
+                        InputProps={{
+                            endAdornment: searchTerm && (
+                                <IconButton onClick={() => setSearchTerm('')} size="small">
+                                    <Delete />
+                                </IconButton>
+                            ),
+                        }}
                     />
-                    <KafkaTopicTable onRowClick={connectWebSocket} topics={Object.values(clusterStatus?.Topics || {})} searchTerm={searchTerm} connectWebSocket={connectWebSocket} />
+                    <KafkaTopicTable onRowClick={connectWebSocket} topics={Object.values(clusterStatus?.Topics || {})} searchTerm={searchTerm} connectWebSocket={connectWebSocket} onDeleteTopic={handleDeleteTopic} darkMode={darkMode} />
                 </Box>
 
                 {selectedTopic && (
@@ -283,20 +386,23 @@ const KafkaDashboard = () => {
                                 Topic Live Messages
                             </Typography>
                         </Typography>
-                        <Box my={8} sx={{ maxWidth: '800px' }}>
+                        <Box my={8} sx={{ maxWidth: '100%' }}>
+                            <Typography variant="h6" gutterBottom>
+                                Live Messages
+                            </Typography>
                             <Paper
                                 sx={{
-                                    height: '200px',
+                                    height: '300px',
                                     overflow: 'auto',
                                     border: '1px solid #ccc',
                                     padding: '10px',
-                                    backgroundColor: '#000',
-                                    color: '#0f0',
+                                    backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+                                    color: darkMode ? '#0f0' : '#000',
                                 }}
                                 ref={logBoxRef}
                             >
                                 {topicLogs.map((log, index) => (
-                                    <Typography key={index} variant="body1" align="left">
+                                    <Typography key={index} variant="body1" align="left" sx={{ fontFamily: 'monospace' }}>
                                         {new Date().toLocaleTimeString()} - {log}
                                     </Typography>
                                 ))}

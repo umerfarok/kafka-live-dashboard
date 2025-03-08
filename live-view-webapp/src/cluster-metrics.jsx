@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Typography } from '@mui/material';
+import { API_URL } from './config';
 
 function KafkaMetrics() {
     const [data, setData] = useState(null);
 
     useEffect(() => {
-        axios.get('http://localhost:5001/kafka_metrics')
+        axios.get(`${API_URL}/kafka_metrics`)
             .then(response => {
                 setData(response.data);
             })
@@ -15,7 +16,7 @@ function KafkaMetrics() {
             });
     }, []);
 
-    if (!data) {
+    if (!data) { 
         return <div>Loading...</div>;
     }
 
