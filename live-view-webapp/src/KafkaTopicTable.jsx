@@ -3,13 +3,15 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-material.css';
 import { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { Button, IconButton, Tooltip } from '@mui/material';
+import { Button, IconButton, Tooltip, useTheme } from '@mui/material';
 import { Delete, PlayArrow, Stop } from '@mui/icons-material';
 
-const KafkaTopicTable = ({ topics, searchTerm, onRowClick, onDeleteTopic, darkMode }) => {
+const KafkaTopicTable = ({ topics, searchTerm, onRowClick, onDeleteTopic }) => {
     const [gridApi, setGridApi] = useState(null);
     const [gridColumnApi, setGridColumnApi] = useState(null);
     const [selectedTopic, setSelectedTopic] = useState(null);
+    const theme = useTheme();
+    const isDarkMode = theme.palette.mode === 'dark';
 
     const onGridReady = (params) => {
         setGridApi(params.api);
@@ -126,7 +128,8 @@ const KafkaTopicTable = ({ topics, searchTerm, onRowClick, onDeleteTopic, darkMo
         topic.Name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const gridTheme = darkMode ? 'ag-theme-material-dark' : 'ag-theme-material';
+    // Define custom grid theme based on dark mode
+    const gridTheme = isDarkMode ? 'ag-theme-material-dark' : 'ag-theme-material';
 
     return (
         <div 
@@ -134,11 +137,11 @@ const KafkaTopicTable = ({ topics, searchTerm, onRowClick, onDeleteTopic, darkMo
             style={{ 
                 width: '100%', 
                 height: 'calc(100vh - 500px)',
-                '--ag-background-color': darkMode ? '#1e1e1e' : '#ffffff',
-                '--ag-header-background-color': darkMode ? '#2d2d2d' : '#f5f5f5',
-                '--ag-odd-row-background-color': darkMode ? '#262626' : '#fafafa',
-                '--ag-header-foreground-color': darkMode ? '#ffffff' : '#000000',
-                '--ag-foreground-color': darkMode ? '#ffffff' : '#000000',
+                '--ag-background-color': isDarkMode ? '#1e1e1e' : '#ffffff',
+                '--ag-header-background-color': isDarkMode ? '#2d2d2d' : '#f5f5f5',
+                '--ag-odd-row-background-color': isDarkMode ? '#262626' : '#fafafa',
+                '--ag-header-foreground-color': isDarkMode ? '#ffffff' : '#000000',
+                '--ag-foreground-color': isDarkMode ? '#ffffff' : '#000000',
             }}
         >
             <AgGridReact
@@ -164,8 +167,7 @@ KafkaTopicTable.propTypes = {
     topics: PropTypes.array.isRequired,
     searchTerm: PropTypes.string,
     onRowClick: PropTypes.func.isRequired,
-    onDeleteTopic: PropTypes.func.isRequired,
-    darkMode: PropTypes.bool
+    onDeleteTopic: PropTypes.func.isRequired
 };
 
 export default KafkaTopicTable;

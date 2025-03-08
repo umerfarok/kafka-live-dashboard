@@ -4,12 +4,25 @@ import {
   Routes,
   Link as RouterLink,
 } from "react-router-dom";
-import { AppBar, Toolbar, Typography, Button, Box } from "@mui/material";
+import { 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Button, 
+  Box, 
+  IconButton,
+  useTheme
+} from "@mui/material";
+import { Brightness4, Brightness7 } from "@mui/icons-material";
 import LiveKafkaDashbord from "./LiveChart.jsx";
 import KafkaMetrics from "./cluster-metrics.jsx";
 import ConsumerGroups from "./ConsumerGroups.jsx";
+import { useColorMode } from "./ThemeContext";
 
 function App() {
+  const theme = useTheme();
+  const colorMode = useColorMode();
+
   return (
     <Router>
       <AppBar position="fixed">
@@ -17,7 +30,7 @@ function App() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Kafka Dashboard
           </Typography> 
-          <Box display="flex" justifyContent="space-around" width="40%">
+          <Box display="flex" justifyContent="space-around" alignItems="center">
             <Button
               color="inherit"
               component={RouterLink}
@@ -26,6 +39,7 @@ function App() {
                 border: "1px solid transparent",
                 borderRadius: "5px",
                 "&:hover": { border: "1px solid white" },
+                mx: 1
               }}
             >
               Live Dashboard
@@ -38,6 +52,7 @@ function App() {
                 border: "1px solid transparent",
                 borderRadius: "5px",
                 "&:hover": { border: "1px solid white" },
+                mx: 1
               }}
             >
               Metrics
@@ -50,10 +65,14 @@ function App() {
                 border: "1px solid transparent",
                 borderRadius: "5px",
                 "&:hover": { border: "1px solid white" },
+                mx: 1
               }}
             >
               Consumer Groups
             </Button>
+            <IconButton sx={{ ml: 2 }} onClick={colorMode.toggleColorMode} color="inherit">
+              {theme.palette.mode === 'dark' ? <Brightness7 /> : <Brightness4 />}
+            </IconButton>
           </Box>
         </Toolbar>
       </AppBar>

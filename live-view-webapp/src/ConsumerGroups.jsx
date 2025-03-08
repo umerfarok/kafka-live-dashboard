@@ -12,20 +12,22 @@ import {
     Collapse,
     IconButton,
     Chip,
+    useTheme,
+    Container,
 } from '@mui/material';
 import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
 import { API_URL } from './config';
 
-const ConsumerGroupRow = ({ group, details, darkMode }) => {
+const ConsumerGroupRow = ({ group, details }) => {
     const [open, setOpen] = useState(false);
+    const theme = useTheme();
+    const isDarkMode = theme.palette.mode === 'dark';
     
     return (
         <>
             <TableRow 
                 sx={{ 
                     '& > *': { borderBottom: 'unset' },
-                    backgroundColor: darkMode ? '#1e1e1e' : 'inherit',
-                    color: darkMode ? '#fff' : 'inherit',
                 }}
             >
                 <TableCell>
@@ -90,10 +92,11 @@ const ConsumerGroupRow = ({ group, details, darkMode }) => {
     );
 };
 
-const ConsumerGroups = ({ darkMode }) => {
+const ConsumerGroups = () => {
     const [consumerGroups, setConsumerGroups] = useState({});
     const [error, setError] = useState(null);
-
+    const theme = useTheme();
+    
     useEffect(() => {
         const fetchConsumerGroups = async () => {
             try {
@@ -119,11 +122,11 @@ const ConsumerGroups = ({ darkMode }) => {
     }
 
     return (
-        <Box sx={{ mt: 4 }}>
-            <Typography variant="h5" gutterBottom>
+        <Container maxWidth="lg" sx={{ mt: 10, mb: 4 }}>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 3, mb: 3 }}>
                 Consumer Groups
             </Typography>
-            <TableContainer component={Paper}>
+            <TableContainer component={Paper} elevation={3}>
                 <Table>
                     <TableHead>
                         <TableRow>
@@ -139,13 +142,12 @@ const ConsumerGroups = ({ darkMode }) => {
                                 key={group} 
                                 group={group} 
                                 details={details}
-                                darkMode={darkMode}
                             />
                         ))}
                     </TableBody>
                 </Table>
             </TableContainer>
-        </Box>
+        </Container>
     );
 };
 

@@ -707,7 +707,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
-	server.createTestTopicIfRequired()
+	CreateTestTopicIfRequired(config)
+
 	http.Handle("/", server)
 	http.HandleFunc("/kafka_metrics", corsMiddleware(server.ServeKafkaMetrics))
 

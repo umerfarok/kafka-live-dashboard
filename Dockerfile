@@ -9,6 +9,8 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 COPY live-view-webapp/ .
+# Create .env file with the API URL for production build
+RUN echo "VITE_API_URL=http://localhost:5001" > .env
 RUN npm install
 RUN npm run build
 
