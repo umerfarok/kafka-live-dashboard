@@ -652,34 +652,55 @@ func (s *Server) handleWebSocket(conn *websocket.Conn, topic string) {
 	}
 	defer consumer.Close()
 
-	partitionConsumer, err := consumer.ConsumePartition(topic, 0, sarama.OffsetNewest)
+	// Try to consume from all partitions
+	partitions, err := s.kafkaConn.Partitions(topic)
 	if err != nil {
-		log.Println("Failed to start consumer for partition:", err)
+		log.Println("Failed to get partitions:", err)
 		return
 	}
-	defer partitionConsumer.Close()
 
+	// Create a message channel to collect messages from all partitions
+	messages := make(chan *sarama.ConsumerMessage)
+	errors := make(chan error)
 	done := make(chan struct{})
 	defer close(done)
 
-	go func() {
-		for {
-			select {
-			case message := <-partitionConsumer.Messages():
-				err := conn.WriteMessage(websocket.TextMessage, message.Value)
-				if err != nil {
-					log.Println("WebSocket write error:", err)
-					return
-				}
-			case <-done:
+	// Start consuming from each partition
+	for _, partition := range partitions {
+		go func(partition int32) {
+			partitionConsumer, err := consumer.ConsumePartition(topic, partition, sarama.OffsetNewest)
+			if err != nil {
+				errors <- err
 				return
 			}
-		}
-	}()
-	_, _, err = conn.ReadMessage()
-	if err != nil {
-		if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
-			log.Println("WebSocket read error:", err)
+			defer partitionConsumer.Close()
+
+			for {
+				select {
+				case msg := <-partitionConsumer.Messages():
+					messages <- msg
+				case err := <-partitionConsumer.Errors():
+					errors <- err
+				case <-done:
+					return
+				}
+			}
+		}(partition)
+	}
+
+	// Handle messages and errors
+	for {
+		select {
+		case msg := <-messages:
+			err := conn.WriteMessage(websocket.TextMessage, msg.Value)
+			if err != nil {
+				log.Println("WebSocket write error:", err)
+				return
+			}
+		case err := <-errors:
+			log.Printf("Error consuming message: %v", err)
+		case <-done:
+			return
 		}
 	}
 }

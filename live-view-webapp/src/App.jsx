@@ -11,12 +11,14 @@ import {
   Button, 
   Box, 
   IconButton,
-  useTheme
+  useTheme,
+  Stack
 } from "@mui/material";
-import { Brightness4, Brightness7 } from "@mui/icons-material";
+import { Brightness4, Brightness7, Home } from "@mui/icons-material";
 import LiveKafkaDashbord from "./LiveChart.jsx";
 import KafkaMetrics from "./cluster-metrics.jsx";
 import ConsumerGroups from "./ConsumerGroups.jsx";
+import HomePage from "./HomePage.jsx";
 import { useColorMode } from "./ThemeContext";
 
 function App() {
@@ -25,12 +27,20 @@ function App() {
 
   return (
     <Router>
-      <AppBar position="fixed">
+      <AppBar position="fixed" sx={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)' }}>
         <Toolbar>
+          <IconButton
+            color="inherit"
+            component={RouterLink}
+            to="/"
+            sx={{ mr: 2 }}
+          >
+            <Home />
+          </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Kafka Dashboard
-          </Typography> 
-          <Box display="flex" justifyContent="space-around" alignItems="center">
+          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
             <Button
               color="inherit"
               component={RouterLink}
@@ -39,7 +49,6 @@ function App() {
                 border: "1px solid transparent",
                 borderRadius: "5px",
                 "&:hover": { border: "1px solid white" },
-                mx: 1
               }}
             >
               Live Dashboard
@@ -52,7 +61,6 @@ function App() {
                 border: "1px solid transparent",
                 borderRadius: "5px",
                 "&:hover": { border: "1px solid white" },
-                mx: 1
               }}
             >
               Metrics
@@ -65,20 +73,19 @@ function App() {
                 border: "1px solid transparent",
                 borderRadius: "5px",
                 "&:hover": { border: "1px solid white" },
-                mx: 1
               }}
             >
               Consumer Groups
             </Button>
-            <IconButton sx={{ ml: 2 }} onClick={colorMode.toggleColorMode} color="inherit">
+            <IconButton sx={{ ml: 1 }} onClick={colorMode.toggleColorMode} color="inherit">
               {theme.palette.mode === 'dark' ? <Brightness7 /> : <Brightness4 />}
             </IconButton>
-          </Box>
+          </Stack>
         </Toolbar>
       </AppBar>
 
       <Routes>
-        <Route path="/" element={<LiveKafkaDashbord />} />
+        <Route path="/" element={<HomePage />} />
         <Route path="/live-kafka-dashboard" element={<LiveKafkaDashbord />} />
         <Route path="/kafka-metrics" element={<KafkaMetrics />} />
         <Route path="/consumer-groups" element={<ConsumerGroups />} />
