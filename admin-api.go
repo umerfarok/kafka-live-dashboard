@@ -11,7 +11,7 @@ func (s *Server) ServeKafkaMetrics(w http.ResponseWriter, r *http.Request) {
 
 	brokers := s.kafkaConn.Brokers() 
 	brokerIDs := make([]int32, len(brokers))
-	for i, broker := range brokers {
+	for i, broker := range brokers { 
 		brokerIDs[i] = broker.ID()
 	}
 

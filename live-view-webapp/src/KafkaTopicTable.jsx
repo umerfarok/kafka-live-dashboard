@@ -16,7 +16,7 @@ const KafkaTopicTable = ({ topics, searchTerm, onRowClick, onDeleteTopic }) => {
     const onGridReady = (params) => {
         setGridApi(params.api);
         setGridColumnApi(params.columnApi);
-    };
+    }; 
 
     const handleTopicClick = (topic) => {
         setSelectedTopic(topic === selectedTopic ? null : topic);

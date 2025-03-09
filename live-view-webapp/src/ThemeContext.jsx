@@ -15,7 +15,7 @@ export const ThemeProviderWrapper = ({ children }) => {
   // Get initial mode from localStorage, default to 'light' if not found
   const [mode, setMode] = useState(() => {
     const savedMode = localStorage.getItem('themeMode');
-    return savedMode || 'light';
+    return savedMode || 'dark';
   });
 
   // Update the theme only after the initial render to avoid hydration mismatch

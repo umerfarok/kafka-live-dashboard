@@ -15,13 +15,6 @@ import (
 var (
 	messageTypes = []string{"info", "warning", "error", "debug"}
 	sources      = []string{"sensor-1", "sensor-2", "api-gateway", "database", "cache"}
-	tagSets      = [][]string{
-		{"production", "server-1"},
-		{"staging", "server-2"},
-		{"development", "local"},
-		{"test", "ci-pipeline"},
-		{"monitoring", "alerts"},
-	}
 )
 
 type ExampleMessage struct {
@@ -30,7 +23,6 @@ type ExampleMessage struct {
 	Value     float64   `json:"value"`
 	Type      string    `json:"type"`
 	Source    string    `json:"source"`
-	Tags      []string  `json:"tags"`
 }
 
 // CreateTestTopicIfRequired creates a test topic with sample data if specified in config
@@ -88,7 +80,6 @@ func sendSampleMessages(producer sarama.SyncProducer, topic string, messageCount
 			Value:     r.Float64() * 100,
 			Type:      messageTypes[r.Intn(len(messageTypes))],
 			Source:    sources[r.Intn(len(sources))],
-			Tags:      tagSets[r.Intn(len(tagSets))],
 		}
 
 		messageBytes, err := json.Marshal(message)

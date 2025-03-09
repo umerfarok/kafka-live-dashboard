@@ -11,16 +11,6 @@ const producer = kafka.producer();
 const generateRandomValue = () => Math.round(Math.random() * 100);
 const generateMessageType = () => ['info', 'warning', 'error', 'debug'][Math.floor(Math.random() * 4)];
 const generateSource = () => ['sensor-1', 'sensor-2', 'api-gateway', 'database', 'cache'][Math.floor(Math.random() * 5)];
-const generateTags = () => {
-    const tags = [
-        ['production', 'server-1'],
-        ['staging', 'server-2'],
-        ['development', 'local'],
-        ['test', 'ci-pipeline'],
-        ['monitoring', 'alerts']
-    ];
-    return tags[Math.floor(Math.random() * tags.length)];
-};
 
 // Function to generate a message
 const generateMessage = () => ({
@@ -28,8 +18,7 @@ const generateMessage = () => ({
     timestamp: new Date().toISOString(),
     value: generateRandomValue(),
     type: generateMessageType(),
-    source: generateSource(),
-    tags: generateTags()
+    source: generateSource()
 });
 
 // Function to send messages
@@ -80,3 +69,4 @@ const intervalMs = parseInt(process.argv[4]) || 1000;
 
 console.log(`Starting to send ${messageCount} messages to topic '${topic}' with ${intervalMs}ms interval`);
 sendMessages(topic, messageCount, intervalMs);
+sendMessages("test-topic", messageCount, intervalMs);

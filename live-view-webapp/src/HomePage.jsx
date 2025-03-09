@@ -1,82 +1,117 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
     Box, 
-    Container, 
-    Typography, 
+    Stack,
     Card, 
     CardContent, 
-    Grid, 
+    Typography, 
     useTheme,
-    LinearProgress,
-    Stack,
     Chip,
+    IconButton,
     Tooltip,
-    IconButton
+    AppBar,
+    Toolbar,
 } from '@mui/material';
 import { 
-    Speed as SpeedIcon,
-    Timer as TimerIcon,
-    Storage as StorageIcon,
-    Topic as TopicIcon,
-    Refresh as RefreshIcon
+    Refresh as RefreshIcon,
+    Circle as CircleIcon
 } from '@mui/icons-material';
 import KafkaGlobe from './KafkaGlobe';
 import { API_URL } from './config';
 
-const MetricCard = ({ title, value, icon, subtitle, color, progress }) => {
+// SidePanel component for message activity feed
+const SidePanel = ({ children, side = 'left' }) => {
     const theme = useTheme();
-    const isDarkMode = theme.palette.mode === 'dark';
-
     return (
-        <Card sx={{ 
-            height: '100%',
-            background: isDarkMode ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)',
-            backdropFilter: 'blur(10px)',
-            border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-            transition: 'transform 0.2s ease-in-out',
+        <Box
+            sx={{
+                position: 'fixed',
+                top: 128, // Increased from 64 to account for both app bars
+                [side]: 0,
+                width: '320px',
+                height: 'calc(100vh - 128px)', // Adjusted height
+                overflowY: 'auto',
+                background: theme.palette.mode === 'dark' 
+                    ? 'rgba(0,0,0,0.7)' 
+                    : 'rgba(255,255,255,0.7)',
+                backdropFilter: 'blur(10px)',
+                borderRight: side === 'left' ? 1 : 0,
+                borderLeft: side === 'right' ? 1 : 0,
+                borderColor: theme.palette.divider,
+                p: 2,
+                zIndex: 2,
+                '&::-webkit-scrollbar': {
+                    width: '6px',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                    backgroundColor: theme.palette.mode === 'dark' 
+                        ? 'rgba(255,255,255,0.2)' 
+                        : 'rgba(0,0,0,0.2)',
+                    borderRadius: '3px',
+                },
+            }}
+        >
+            {children}
+        </Box>
+    );
+};
+
+const ActivityItem = ({ message }) => {
+    const theme = useTheme();
+    const data = typeof message === 'string' ? JSON.parse(message) : message;
+    
+    return (
+        <Box sx={{ 
+            mb: 1.5,
+            p: 1.5,
+            borderRadius: 1,
+            backgroundColor: theme.palette.mode === 'dark' 
+                ? 'rgba(255,255,255,0.05)' 
+                : 'rgba(0,0,0,0.05)',
+            border: '1px solid',
+            borderColor: theme.palette.divider,
             '&:hover': {
-                transform: 'translateY(-4px)'
+                backgroundColor: theme.palette.mode === 'dark' 
+                    ? 'rgba(255,255,255,0.1)' 
+                    : 'rgba(0,0,0,0.1)',
             }
         }}>
+            <Typography 
+                variant="body2" 
+                component="pre" 
+                sx={{ 
+                    fontFamily: 'monospace',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    margin: 0
+                }}
+            >
+                {JSON.stringify(data, null, 2)}
+            </Typography>
+        </Box>
+    );
+};
+
+// Stats Card Component
+const StatsCard = ({ title, value, icon, color }) => {
+    const theme = useTheme();
+    return (
+        <Card sx={{ 
+            background: 'transparent',
+            boxShadow: 'none',
+            border: `1px solid ${theme.palette.divider}`,
+            mb: 2
+        }}>
             <CardContent>
-                <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-                    <Box sx={{ 
-                        p: 1, 
-                        borderRadius: 2, 
-                        bgcolor: `${color}22`
-                    }}>
-                        {icon}
-                    </Box>
-                    <Typography variant="h6" color="textSecondary">
+                <Stack direction="row" spacing={2} alignItems="center" mb={1}>
+                    {icon}
+                    <Typography variant="h6">
                         {title}
                     </Typography>
                 </Stack>
-                
-                <Typography variant="h3" sx={{ mb: 1, color: color }}>
-                    {value.toLocaleString()}
+                <Typography variant="h4" sx={{ color }}>
+                    {value}
                 </Typography>
-                
-                {subtitle && (
-                    <Typography variant="body2" color="textSecondary">
-                        {subtitle}
-                    </Typography>
-                )}
-                
-                {progress !== undefined && (
-                    <LinearProgress 
-                        variant="determinate" 
-                        value={progress} 
-                        sx={{ 
-                            mt: 2, 
-                            height: 6, 
-                            borderRadius: 3,
-                            backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-                            '& .MuiLinearProgress-bar': {
-                                backgroundColor: color
-                            }
-                        }} 
-                    />
-                )}
             </CardContent>
         </Card>
     );
@@ -87,7 +122,6 @@ const HomePage = () => {
     const [clusterMetrics, setClusterMetrics] = useState(null);
     const [lastRefresh, setLastRefresh] = useState(new Date());
     const theme = useTheme();
-    const isDarkMode = theme.palette.mode === 'dark';
 
     const handleRefresh = async () => {
         try {
@@ -101,7 +135,6 @@ const HomePage = () => {
     };
 
     useEffect(() => {
-        // Connect to WebSocket for real-time messages
         const ws = new WebSocket(`${API_URL.replace('http', 'ws')}/ws?topic=my-topic`);
         
         ws.onopen = () => console.log('WebSocket connection established');
@@ -129,199 +162,126 @@ const HomePage = () => {
 
     const messageRate = useMemo(() => {
         if (messages.length < 2) return 0;
-        const timeSpan = (new Date() - lastRefresh) / 1000; // in seconds
+        const timeSpan = (new Date() - lastRefresh) / 1000;
         return (messages.length / timeSpan).toFixed(1);
     }, [messages.length, lastRefresh]);
 
     return (
         <Box sx={{ 
-            position: 'relative', 
-            minHeight: '100vh',
+            height: '100vh',
             backgroundColor: theme.palette.background.default,
-            color: theme.palette.text.primary,
-            pb: 4
+            pt: 16 // Increased padding top to account for both app bars
         }}>
-            <KafkaGlobe messages={messages} />
-            
-            <Container sx={{ 
-                position: 'relative', 
-                zIndex: 1, 
-                pt: 12
+            {/* Main Globe Container */}
+            <Box sx={{ 
+                position: 'fixed',
+                left: '320px', // Changed from 300px to match the side panel width
+                right: '320px', // Changed from 300px to match the side panel width
+                top: 128, // Increased from 64 to account for both app bars
+                bottom: 0,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                overflow: 'hidden', // Added to prevent any overflow
             }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
-                    <Typography
-                        variant="h3"
-                        sx={{
-                            color: isDarkMode ? '#fff' : '#000',
-                            textShadow: isDarkMode 
-                                ? '2px 2px 4px rgba(0,0,0,0.5)' 
-                                : '2px 2px 4px rgba(255,255,255,0.5)',
-                            fontWeight: 'bold'
-                        }}
-                    >
-                        Kafka Dashboard
-                    </Typography>
+                <Box sx={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    maxWidth: '1000px', // Reduced from 1200px for better centering
+                    margin: '0 auto', // Added to ensure horizontal centering
+                    display: 'flex', // Added to ensure the globe fills the container
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                }}>
+                    <KafkaGlobe messages={messages} />
+                </Box>
+            </Box>
 
+            {/* Left Panel - Message Feed */}
+            <SidePanel side="left">
+                <Typography variant="h6" gutterBottom>
+                    Live Messages
+                </Typography>
+                <Stack spacing={1}>
+                    {messages.slice(-15).reverse().map((msg, idx) => (
+                        <ActivityItem key={idx} message={msg} />
+                    ))}
+                </Stack>
+            </SidePanel>
+
+            {/* Right Panel - Metrics */}
+            <SidePanel side="right">
+                <Typography variant="h6" gutterBottom>
+                    Kafka Metrics
+                </Typography>
+                {clusterMetrics && (
+                    <Stack spacing={2}>
+                        <StatsCard
+                            title="Message Rate"
+                            value={`${messageRate}/sec`}
+                            icon={<CircleIcon sx={{ color: theme.palette.success.main }} />}
+                            color={theme.palette.success.main}
+                        />
+                        <StatsCard
+                            title="Total Topics"
+                            value={clusterMetrics.TotalTopics}
+                            icon={<CircleIcon sx={{ color: theme.palette.primary.main }} />}
+                            color={theme.palette.primary.main}
+                        />
+                        <StatsCard
+                            title="Active Topics"
+                            value={clusterMetrics.ActiveTopics}
+                            icon={<CircleIcon sx={{ color: theme.palette.warning.main }} />}
+                            color={theme.palette.warning.main}
+                        />
+                        <StatsCard
+                            title="Total Partitions"
+                            value={clusterMetrics.Partitions}
+                            icon={<CircleIcon sx={{ color: theme.palette.info.main }} />}
+                            color={theme.palette.info.main}
+                        />
+                        <StatsCard
+                            title="Brokers"
+                            value={clusterMetrics.Brokers.length}
+                            icon={<CircleIcon sx={{ color: theme.palette.secondary.main }} />}
+                            color={theme.palette.secondary.main}
+                        />
+                    </Stack>
+                )}
+            </SidePanel>
+
+            {/* Top AppBar */}
+            <AppBar 
+                position="fixed" 
+                color="transparent" 
+                sx={{ 
+                    backdropFilter: 'blur(10px)',
+                    backgroundColor: theme.palette.mode === 'dark' 
+                        ? 'rgba(0,0,0,0.7)' 
+                        : 'rgba(255,255,255,0.7)',
+                    borderBottom: 1,
+                    borderColor: 'divider',
+                    top: 64, // Position below the main app bar
+                }}
+            >
+                <Toolbar>
+                    <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                        Kafka Live Dashboard
+                    </Typography>
                     <Stack direction="row" spacing={2} alignItems="center">
                         <Chip 
-                            label={`Last updated: ${lastRefresh.toLocaleTimeString()}`}
+                            label={`Messages: ${messages.length}`}
                             color="primary"
                             variant="outlined"
                         />
-                        <Tooltip title="Refresh Data">
+                        <Tooltip title="Refresh Metrics">
                             <IconButton onClick={handleRefresh} color="primary">
                                 <RefreshIcon />
                             </IconButton>
                         </Tooltip>
                     </Stack>
-                </Stack>
-
-                <Grid container spacing={3}>
-                    {clusterMetrics && (
-                        <>
-                            <Grid item xs={12} md={6} lg={3}>
-                                <MetricCard
-                                    title="Total Topics"
-                                    value={clusterMetrics.TotalTopics}
-                                    icon={<TopicIcon sx={{ color: theme.palette.success.main }} />}
-                                    subtitle={`${clusterMetrics.ActiveTopics} active topics`}
-                                    color={theme.palette.success.main}
-                                    progress={(clusterMetrics.ActiveTopics / clusterMetrics.TotalTopics) * 100}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} md={6} lg={3}>
-                                <MetricCard
-                                    title="Messages"
-                                    value={messages.length}
-                                    icon={<StorageIcon sx={{ color: theme.palette.primary.main }} />}
-                                    subtitle={`${messageRate} messages/sec`}
-                                    color={theme.palette.primary.main}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} md={6} lg={3}>
-                                <MetricCard
-                                    title="Total Partitions"
-                                    value={clusterMetrics.Partitions}
-                                    icon={<SpeedIcon sx={{ color: theme.palette.warning.main }} />}
-                                    subtitle={`Across ${clusterMetrics.TotalTopics} topics`}
-                                    color={theme.palette.warning.main}
-                                />
-                            </Grid>
-
-                            <Grid item xs={12} md={6} lg={3}>
-                                <MetricCard
-                                    title="Brokers"
-                                    value={clusterMetrics.Brokers.length}
-                                    icon={<TimerIcon sx={{ color: theme.palette.info.main }} />}
-                                    subtitle="Active cluster nodes"
-                                    color={theme.palette.info.main}
-                                />
-                            </Grid>
-                        </>
-                    )}
-                </Grid>
-
-                {/* Activity Summary */}
-                <Card sx={{ 
-                    mt: 4,
-                    background: isDarkMode ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)',
-                    backdropFilter: 'blur(10px)',
-                    border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-                }}>
-                    <CardContent>
-                        <Typography variant="h6" gutterBottom>
-                            Recent Activity
-                        </Typography>
-                        <Grid container spacing={2}>
-                            <Grid item xs={12} md={4}>
-                                <Stack spacing={1}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Message Types
-                                    </Typography>
-                                    {['info', 'warning', 'error', 'debug'].map(type => {
-                                        const count = messages.filter(m => {
-                                            try {
-                                                const parsed = typeof m === 'string' ? JSON.parse(m) : m;
-                                                return parsed.type === type;
-                                            } catch {
-                                                return false;
-                                            }
-                                        }).length;
-                                        return (
-                                            <Chip
-                                                key={type}
-                                                label={`${type}: ${count}`}
-                                                size="small"
-                                                color={
-                                                    type === 'error' ? 'error' :
-                                                    type === 'warning' ? 'warning' :
-                                                    type === 'info' ? 'info' : 'default'
-                                                }
-                                                variant="outlined"
-                                            />
-                                        );
-                                    })}
-                                </Stack>
-                            </Grid>
-                            <Grid item xs={12} md={4}>
-                                <Stack spacing={1}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Top Sources
-                                    </Typography>
-                                    {['sensor-1', 'sensor-2', 'api-gateway', 'database', 'cache']
-                                        .map(source => {
-                                            const count = messages.filter(m => {
-                                                try {
-                                                    const parsed = typeof m === 'string' ? JSON.parse(m) : m;
-                                                    return parsed.source === source;
-                                                } catch {
-                                                    return false;
-                                                }
-                                            }).length;
-                                            return (
-                                                <Chip
-                                                    key={source}
-                                                    label={`${source}: ${count}`}
-                                                    size="small"
-                                                    color="primary"
-                                                    variant="outlined"
-                                                />
-                                            );
-                                        })}
-                                </Stack>
-                            </Grid>
-                            <Grid item xs={12} md={4}>
-                                <Stack spacing={1}>
-                                    <Typography variant="subtitle2" color="textSecondary">
-                                        Environment Distribution
-                                    </Typography>
-                                    {['production', 'staging', 'development', 'test'].map(env => {
-                                        const count = messages.filter(m => {
-                                            try {
-                                                const parsed = typeof m === 'string' ? JSON.parse(m) : m;
-                                                return parsed.tags?.includes(env);
-                                            } catch {
-                                                return false;
-                                            }
-                                        }).length;
-                                        return (
-                                            <Chip
-                                                key={env}
-                                                label={`${env}: ${count}`}
-                                                size="small"
-                                                color="success"
-                                                variant="outlined"
-                                            />
-                                        );
-                                    })}
-                                </Stack>
-                            </Grid>
-                        </Grid>
-                    </CardContent>
-                </Card>
-            </Container>
+                </Toolbar>
+            </AppBar>
         </Box>
     );
 };
