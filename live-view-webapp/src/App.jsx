@@ -19,6 +19,7 @@ import LiveKafkaDashbord from "./LiveChart.jsx";
 import KafkaMetrics from "./cluster-metrics.jsx";
 import ConsumerGroups from "./ConsumerGroups.jsx";
 import HomePage from "./HomePage.jsx";
+import TopicManagement from "./TopicManagement.jsx";
 import { useColorMode } from "./ThemeContext";
 
 function App() {
@@ -77,6 +78,18 @@ function App() {
             >
               Consumer Groups
             </Button>
+            <Button
+              color="inherit"
+              component={RouterLink}
+              to="/topic-management"
+              sx={{
+                border: "1px solid transparent",
+                borderRadius: "5px",
+                "&:hover": { border: "1px solid white" },
+              }}
+            >
+              Topics
+            </Button>
             <IconButton sx={{ ml: 1 }} onClick={colorMode.toggleColorMode} color="inherit">
               {theme.palette.mode === 'dark' ? <Brightness7 /> : <Brightness4 />}
             </IconButton>
@@ -89,6 +102,7 @@ function App() {
         <Route path="/live-kafka-dashboard" element={<LiveKafkaDashbord />} />
         <Route path="/kafka-metrics" element={<KafkaMetrics />} />
         <Route path="/consumer-groups" element={<ConsumerGroups />} />
+        <Route path="/topic-management" element={<TopicManagement />} />
       </Routes>
     </Router>
   );
