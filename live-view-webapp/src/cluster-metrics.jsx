@@ -15,7 +15,8 @@ import {
     LinearProgress,
     Card, 
     CardContent,
-    Grid
+    Grid,
+    Stack
 } from '@mui/material';
 import { API_URL } from './config';
 
@@ -91,75 +92,54 @@ function KafkaMetrics() {
     });
 
     return (
-        <Container maxWidth="lg" sx={{ mt: 10, mb: 4 }}>
-            <Typography variant="h4" component="h1" gutterBottom sx={{ mt: 3, mb: 3 }}>
+        <Container maxWidth="lg" sx={{ mt: 8, mb: 4 }}>
+            <Typography variant="h5" component="h1" gutterBottom sx={{ mt: 2, mb: 2 }}>
                 Kafka Metrics
             </Typography>
             
-            {/* Summary Cards */}
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-                <Grid item xs={12} sm={6} md={3}>
-                    <Card elevation={3}>
-                        <CardContent>
-                            <Typography color="textSecondary" gutterBottom>
-                                Topics
-                            </Typography>
-                            <Typography variant="h4" component="div">
-                                {totalTopics}
-                            </Typography>
-                        </CardContent>
-                    </Card>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <Card elevation={3}>
-                        <CardContent>
-                            <Typography color="textSecondary" gutterBottom>
-                                Partitions
-                            </Typography>
-                            <Typography variant="h4" component="div">
-                                {totalPartitions}
-                            </Typography>
-                        </CardContent>
-                    </Card>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <Card elevation={3}>
-                        <CardContent>
-                            <Typography color="textSecondary" gutterBottom>
-                                Brokers
-                            </Typography>
-                            <Typography variant="h4" component="div">
-                                {totalBrokers}
-                            </Typography>
-                        </CardContent>
-                    </Card>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                    <Card elevation={3}>
-                        <CardContent>
-                            <Typography color="textSecondary" gutterBottom>
-                                Total Messages
-                            </Typography>
-                            <Typography variant="h4" component="div">
-                                {totalMessages.toLocaleString()}
-                            </Typography>
-                        </CardContent>
-                    </Card>
-                </Grid>
-            </Grid>
+            {/* Summary Cards - Now more compact */}
+            <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }} sx={{ mb: 3 }}>
+                <Card sx={{ flex: 1, borderRadius: 1 }} variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        <Typography variant="body2" color="textSecondary">Topics</Typography>
+                        <Typography variant="h5">{totalTopics}</Typography>
+                    </CardContent>
+                </Card>
+                
+                <Card sx={{ flex: 1, borderRadius: 1 }} variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        <Typography variant="body2" color="textSecondary">Partitions</Typography>
+                        <Typography variant="h5">{totalPartitions}</Typography>
+                    </CardContent>
+                </Card>
+                
+                <Card sx={{ flex: 1, borderRadius: 1 }} variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        <Typography variant="body2" color="textSecondary">Brokers</Typography>
+                        <Typography variant="h5">{totalBrokers}</Typography>
+                    </CardContent>
+                </Card>
+                
+                <Card sx={{ flex: 1, borderRadius: 1 }} variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        <Typography variant="body2" color="textSecondary">Total Messages</Typography>
+                        <Typography variant="h5">{totalMessages.toLocaleString()}</Typography>
+                    </CardContent>
+                </Card>
+            </Stack>
             
-            <TableContainer component={Paper} elevation={3}>
-                <Table>
+            <TableContainer component={Paper} elevation={2} sx={{ borderRadius: 1, overflow: 'hidden' }}>
+                <Table size="small">
                     <TableHead>
-                        <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Topic</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Partition</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Newest Offset</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Oldest Offset</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Messages</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Leader</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Replicas</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold' }}>In-Sync Replicas</TableCell>
+                        <TableRow sx={{ backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' }}>
+                            <TableCell sx={{ fontWeight: 'bold', py: 1 }}>Topic</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', py: 1 }}>Partition</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', py: 1 }}>Newest Offset</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', py: 1 }}>Oldest Offset</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', py: 1 }}>Messages</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', py: 1 }}>Leader</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', py: 1 }}>Replicas</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold', py: 1 }}>In-Sync</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
@@ -167,25 +147,40 @@ function KafkaMetrics() {
                             Object.entries(partitions).map(([partition, details], index) => {
                                 const messageCount = details.offsetNewest - details.offsetOldest;
                                 return (
-                                    <TableRow key={`${topic}-${partition}`}>
+                                    <TableRow key={`${topic}-${partition}`} 
+                                        sx={{ 
+                                            '&:nth-of-type(odd)': {
+                                                backgroundColor: theme.palette.mode === 'dark' 
+                                                    ? 'rgba(255,255,255,0.03)' 
+                                                    : 'rgba(0,0,0,0.01)',
+                                            },
+                                            '&:hover': {
+                                                backgroundColor: theme.palette.mode === 'dark'
+                                                    ? 'rgba(255,255,255,0.05)'
+                                                    : 'rgba(0,0,0,0.03)',
+                                            }
+                                        }}
+                                    >
                                         {index === 0 && (
                                             <TableCell 
                                                 rowSpan={Object.keys(partitions).length} 
                                                 sx={{ 
                                                     fontWeight: 'bold', 
-                                                    color: theme.palette.primary.main 
+                                                    color: theme.palette.primary.main,
+                                                    py: 1,
+                                                    verticalAlign: 'top'
                                                 }}
                                             >
                                                 {topic}
                                             </TableCell>
                                         )}
-                                        <TableCell>{partition}</TableCell>
-                                        <TableCell>{details.offsetNewest.toLocaleString()}</TableCell>
-                                        <TableCell>{details.offsetOldest.toLocaleString()}</TableCell>
-                                        <TableCell>{messageCount.toLocaleString()}</TableCell>
-                                        <TableCell>{details.leader}</TableCell>
-                                        <TableCell>{details.replicas.join(', ')}</TableCell>
-                                        <TableCell>{details.isr.join(', ')}</TableCell>
+                                        <TableCell sx={{ py: 1 }}>{partition}</TableCell>
+                                        <TableCell sx={{ py: 1 }}>{details.offsetNewest.toLocaleString()}</TableCell>
+                                        <TableCell sx={{ py: 1 }}>{details.offsetOldest.toLocaleString()}</TableCell>
+                                        <TableCell sx={{ py: 1 }}>{messageCount.toLocaleString()}</TableCell>
+                                        <TableCell sx={{ py: 1 }}>{details.leader}</TableCell>
+                                        <TableCell sx={{ py: 1 }}>{details.replicas.join(', ')}</TableCell>
+                                        <TableCell sx={{ py: 1 }}>{details.isr.join(', ')}</TableCell>
                                     </TableRow>
                                 );
                             })

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Box, 
     Stack,
@@ -14,22 +14,53 @@ import {
 } from '@mui/material';
 import { 
     Refresh as RefreshIcon,
-    Circle as CircleIcon
+    Circle as CircleIcon,
+    DragHandle as DragHandleIcon
 } from '@mui/icons-material';
 import KafkaGlobe from './KafkaGlobe';
 import { API_URL } from './config';
 
-// SidePanel component for message activity feed
-const SidePanel = ({ children, side = 'left' }) => {
+// Resizable SidePanel component
+const SidePanel = ({ children, side = 'left', initialWidth = 320 }) => {
     const theme = useTheme();
+    const [width, setWidth] = useState(initialWidth);
+    const isDragging = useRef(false);
+    const sidebarRef = useRef(null);
+    
+    const handleMouseDown = (e) => {
+        e.preventDefault();
+        isDragging.current = true;
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    };
+    
+    const handleMouseMove = (e) => {
+        if (!isDragging.current) return;
+        
+        if (side === 'left') {
+            const newWidth = Math.max(200, Math.min(600, e.clientX));
+            setWidth(newWidth);
+        } else {
+            const newWidth = Math.max(200, Math.min(600, window.innerWidth - e.clientX));
+            setWidth(newWidth);
+        }
+    };
+    
+    const handleMouseUp = () => {
+        isDragging.current = false;
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+    };
+
     return (
         <Box
+            ref={sidebarRef}
             sx={{
                 position: 'fixed',
-                top: 128, // Increased from 64 to account for both app bars
+                top: 128,
                 [side]: 0,
-                width: '320px',
-                height: 'calc(100vh - 128px)', // Adjusted height
+                width: `${width}px`,
+                height: 'calc(100vh - 128px)',
                 overflowY: 'auto',
                 background: theme.palette.mode === 'dark' 
                     ? 'rgba(0,0,0,0.7)' 
@@ -40,6 +71,7 @@ const SidePanel = ({ children, side = 'left' }) => {
                 borderColor: theme.palette.divider,
                 p: 2,
                 zIndex: 2,
+                transition: 'width 0.1s',
                 '&::-webkit-scrollbar': {
                     width: '6px',
                 },
@@ -52,6 +84,45 @@ const SidePanel = ({ children, side = 'left' }) => {
             }}
         >
             {children}
+            <Box
+                sx={{
+                    position: 'absolute',
+                    top: 0,
+                    [side === 'left' ? 'right' : 'left']: 0,
+                    width: '5px',
+                    height: '100%',
+                    cursor: 'col-resize',
+                    userSelect: 'none',
+                    '&:hover': {
+                        backgroundColor: theme.palette.primary.main,
+                        opacity: 0.2,
+                    },
+                    '&:active': {
+                        backgroundColor: theme.palette.primary.main,
+                        opacity: 0.4,
+                    }
+                }}
+                onMouseDown={handleMouseDown}
+            />
+            <IconButton
+                sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    [side === 'left' ? 'right' : 'left']: '-12px',
+                    transform: 'translateY(-50%)',
+                    backgroundColor: theme.palette.background.paper,
+                    border: `1px solid ${theme.palette.divider}`,
+                    '&:hover': {
+                        backgroundColor: theme.palette.action.hover,
+                    },
+                    padding: '4px',
+                    width: '24px',
+                    height: '50px',
+                }}
+                onMouseDown={handleMouseDown}
+            >
+                <DragHandleIcon fontSize="small" />
+            </IconButton>
         </Box>
     );
 };
@@ -62,8 +133,8 @@ const ActivityItem = ({ message }) => {
     
     return (
         <Box sx={{ 
-            mb: 1.5,
-            p: 1.5,
+            mb: 1,
+            p: 1,
             borderRadius: 1,
             backgroundColor: theme.palette.mode === 'dark' 
                 ? 'rgba(255,255,255,0.05)' 
@@ -83,7 +154,8 @@ const ActivityItem = ({ message }) => {
                     fontFamily: 'monospace',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
-                    margin: 0
+                    margin: 0,
+                    fontSize: '0.75rem'
                 }}
             >
                 {JSON.stringify(data, null, 2)}
@@ -92,7 +164,7 @@ const ActivityItem = ({ message }) => {
     );
 };
 
-// Stats Card Component
+// Smaller and more compact Stats Card Component
 const StatsCard = ({ title, value, icon, color }) => {
     const theme = useTheme();
     return (
@@ -100,18 +172,19 @@ const StatsCard = ({ title, value, icon, color }) => {
             background: 'transparent',
             boxShadow: 'none',
             border: `1px solid ${theme.palette.divider}`,
-            mb: 2
+            mb: 1,
+            borderRadius: 1
         }}>
-            <CardContent>
-                <Stack direction="row" spacing={2} alignItems="center" mb={1}>
+            <CardContent sx={{ py: 1, px: 1.5, '&:last-child': { pb: 1 } }}>
+                <Stack direction="row" spacing={1} alignItems="center">
                     {icon}
-                    <Typography variant="h6">
+                    <Typography variant="body2" fontWeight="medium">
                         {title}
                     </Typography>
+                    <Typography variant="body1" fontWeight="bold" sx={{ ml: 'auto', color }}>
+                        {value}
+                    </Typography>
                 </Stack>
-                <Typography variant="h4" sx={{ color }}>
-                    {value}
-                </Typography>
             </CardContent>
         </Card>
     );
@@ -121,6 +194,8 @@ const HomePage = () => {
     const [messages, setMessages] = useState([]);
     const [clusterMetrics, setClusterMetrics] = useState(null);
     const [lastRefresh, setLastRefresh] = useState(new Date());
+    const [leftPanelWidth, setLeftPanelWidth] = useState(320);
+    const [rightPanelWidth, setRightPanelWidth] = useState(320);
     const theme = useTheme();
 
     const handleRefresh = async () => {
@@ -175,34 +250,37 @@ const HomePage = () => {
             {/* Main Globe Container */}
             <Box sx={{ 
                 position: 'fixed',
-                left: '320px', // Changed from 300px to match the side panel width
-                right: '320px', // Changed from 300px to match the side panel width
-                top: 128, // Increased from 64 to account for both app bars
+                left: `${leftPanelWidth}px`,
+                right: `${rightPanelWidth}px`,
+                top: 128,
                 bottom: 0,
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                overflow: 'hidden', // Added to prevent any overflow
+                overflow: 'hidden',
             }}>
                 <Box sx={{ 
                     width: '100%', 
                     height: '100%', 
-                    maxWidth: '1000px', // Reduced from 1200px for better centering
-                    margin: '0 auto', // Added to ensure horizontal centering
-                    display: 'flex', // Added to ensure the globe fills the container
+                    maxWidth: '1000px',
+                    margin: '0 auto',
+                    display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                 }}>
-                    <KafkaGlobe messages={messages} />
+                    <KafkaGlobe 
+                        messages={messages} 
+                        topicsData={clusterMetrics?.Topics || {}}
+                    />
                 </Box>
             </Box>
 
             {/* Left Panel - Message Feed */}
-            <SidePanel side="left">
+            <SidePanel side="left" initialWidth={leftPanelWidth}>
                 <Typography variant="h6" gutterBottom>
                     Live Messages
                 </Typography>
-                <Stack spacing={1}>
+                <Stack spacing={0.5}>
                     {messages.slice(-15).reverse().map((msg, idx) => (
                         <ActivityItem key={idx} message={msg} />
                     ))}
@@ -210,40 +288,40 @@ const HomePage = () => {
             </SidePanel>
 
             {/* Right Panel - Metrics */}
-            <SidePanel side="right">
+            <SidePanel side="right" initialWidth={rightPanelWidth}>
                 <Typography variant="h6" gutterBottom>
                     Kafka Metrics
                 </Typography>
                 {clusterMetrics && (
-                    <Stack spacing={2}>
+                    <Stack spacing={1}>
                         <StatsCard
                             title="Message Rate"
                             value={`${messageRate}/sec`}
-                            icon={<CircleIcon sx={{ color: theme.palette.success.main }} />}
+                            icon={<CircleIcon sx={{ color: theme.palette.success.main, fontSize: 16 }} />}
                             color={theme.palette.success.main}
                         />
                         <StatsCard
                             title="Total Topics"
                             value={clusterMetrics.TotalTopics}
-                            icon={<CircleIcon sx={{ color: theme.palette.primary.main }} />}
+                            icon={<CircleIcon sx={{ color: theme.palette.primary.main, fontSize: 16 }} />}
                             color={theme.palette.primary.main}
                         />
                         <StatsCard
                             title="Active Topics"
                             value={clusterMetrics.ActiveTopics}
-                            icon={<CircleIcon sx={{ color: theme.palette.warning.main }} />}
+                            icon={<CircleIcon sx={{ color: theme.palette.warning.main, fontSize: 16 }} />}
                             color={theme.palette.warning.main}
                         />
                         <StatsCard
                             title="Total Partitions"
                             value={clusterMetrics.Partitions}
-                            icon={<CircleIcon sx={{ color: theme.palette.info.main }} />}
+                            icon={<CircleIcon sx={{ color: theme.palette.info.main, fontSize: 16 }} />}
                             color={theme.palette.info.main}
                         />
                         <StatsCard
                             title="Brokers"
                             value={clusterMetrics.Brokers.length}
-                            icon={<CircleIcon sx={{ color: theme.palette.secondary.main }} />}
+                            icon={<CircleIcon sx={{ color: theme.palette.secondary.main, fontSize: 16 }} />}
                             color={theme.palette.secondary.main}
                         />
                     </Stack>
@@ -273,9 +351,10 @@ const HomePage = () => {
                             label={`Messages: ${messages.length}`}
                             color="primary"
                             variant="outlined"
+                            size="small"
                         />
                         <Tooltip title="Refresh Metrics">
-                            <IconButton onClick={handleRefresh} color="primary">
+                            <IconButton onClick={handleRefresh} color="primary" size="small">
                                 <RefreshIcon />
                             </IconButton>
                         </Tooltip>

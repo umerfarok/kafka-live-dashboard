@@ -11,7 +11,7 @@ WORKDIR /app/frontend
 COPY live-view-webapp/ .
 # Create .env file with the API URL for production build
 RUN echo "VITE_API_URL=http://localhost:5001" > .env
-RUN npm install
+RUN npm install --legacy-peer-deps
 RUN npm run build
 
 FROM alpine:latest
