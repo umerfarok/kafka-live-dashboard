@@ -1,10 +1,13 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -66,12 +69,117 @@ type Server struct {
 func NewServer(config *config.Config) (*Server, error) {
 	kafkaConfig := sarama.NewConfig()
 	kafkaConfig.Version = sarama.V2_6_0_0
+	kafkaConfig.Consumer.Return.Errors = true
+	kafkaConfig.Producer.Return.Successes = true
 
-	if config.UseSASL {
+	// Log security configuration
+	log.Printf("Configuring Kafka security: Protocol=%s, SSL=%v, SASL=%v",
+		config.SecurityProtocol, config.UseSSL, config.UseSASL)
+
+	switch config.SecurityProtocol {
+	case "PLAINTEXT":
+		log.Println("Using PLAINTEXT security (no encryption)")
+
+	case "SSL":
+		log.Println("Configuring SSL security")
+		kafkaConfig.Net.TLS.Enable = true
+		tlsConfig := &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: !config.SSLVerifyCerts,
+		}
+
+		if config.SSLVerifyCerts && config.SSLCALocation != "" {
+			caCert, err := os.ReadFile(config.SSLCALocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read CA certificate: %v", err)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		if config.SSLCertLocation != "" && config.SSLKeyLocation != "" {
+			cert, err := tls.LoadX509KeyPair(config.SSLCertLocation, config.SSLKeyLocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client certificate/key: %v", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+
+		kafkaConfig.Net.TLS.Config = tlsConfig
+
+		if config.SSLVerifyCerts {
+			log.Println("SSL certificate verification enabled")
+		} else {
+			log.Println("WARNING: SSL certificate verification disabled")
+		}
+
+	case "SASL_PLAINTEXT":
+		log.Printf("Configuring SASL security with mechanism: %s", config.SASLMechanism)
 		kafkaConfig.Net.SASL.Enable = true
 		kafkaConfig.Net.SASL.User = config.KafkaUsername
 		kafkaConfig.Net.SASL.Password = config.KafkaPassword
-		kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+		kafkaConfig.Net.SASL.Handshake = true
+
+		switch config.SASLMechanism {
+		case "PLAIN":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+		case "SCRAM-SHA-256":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+		case "SCRAM-SHA-512":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+		default:
+			return nil, fmt.Errorf("unsupported SASL mechanism: %s", config.SASLMechanism)
+		}
+
+	case "SASL_SSL":
+		log.Printf("Configuring SASL_SSL security with mechanism: %s", config.SASLMechanism)
+		kafkaConfig.Net.TLS.Enable = true
+		kafkaConfig.Net.SASL.Enable = true
+		kafkaConfig.Net.SASL.User = config.KafkaUsername
+		kafkaConfig.Net.SASL.Password = config.KafkaPassword
+		kafkaConfig.Net.SASL.Handshake = true
+
+		// Configure TLS
+		tlsConfig := &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: !config.SSLVerifyCerts,
+		}
+
+		if config.SSLVerifyCerts && config.SSLCALocation != "" {
+			caCert, err := os.ReadFile(config.SSLCALocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read CA certificate: %v", err)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		if config.SSLCertLocation != "" && config.SSLKeyLocation != "" {
+			cert, err := tls.LoadX509KeyPair(config.SSLCertLocation, config.SSLKeyLocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client certificate/key: %v", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+
+		kafkaConfig.Net.TLS.Config = tlsConfig
+
+		// Configure SASL
+		switch config.SASLMechanism {
+		case "PLAIN":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+		case "SCRAM-SHA-256":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+		case "SCRAM-SHA-512":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+		default:
+			return nil, fmt.Errorf("unsupported SASL mechanism: %s", config.SASLMechanism)
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported security protocol: %s", config.SecurityProtocol)
 	}
 
 	kafkaConn, err := sarama.NewClient(strings.Split(config.KafkaBrokers, ","), kafkaConfig)
@@ -725,9 +833,6 @@ func main() {
 	}
 
 	go server.updateTopics()
-	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
-	}
 	CreateTestTopicIfRequired(config)
 
 	http.Handle("/", server)

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -25,15 +28,250 @@ type ExampleMessage struct {
 	Source    string    `json:"source"`
 }
 
-// CreateTestTopicIfRequired creates a test topic with sample data if specified in config
+func createAdminClient(config *config.Config) (sarama.ClusterAdmin, error) {
+	kafkaConfig := sarama.NewConfig()
+	kafkaConfig.Version = sarama.V2_6_0_0
+
+	switch config.SecurityProtocol {
+	case "PLAINTEXT":
+		// Default configuration is fine for plaintext
+
+	case "SSL":
+		kafkaConfig.Net.TLS.Enable = true
+		tlsConfig := &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: !config.SSLVerifyCerts,
+		}
+
+		if config.SSLVerifyCerts && config.SSLCALocation != "" {
+			caCert, err := os.ReadFile(config.SSLCALocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read CA certificate: %v", err)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		if config.SSLCertLocation != "" && config.SSLKeyLocation != "" {
+			cert, err := tls.LoadX509KeyPair(config.SSLCertLocation, config.SSLKeyLocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client certificate/key: %v", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+
+		kafkaConfig.Net.TLS.Config = tlsConfig
+
+	case "SASL_PLAINTEXT":
+		kafkaConfig.Net.SASL.Enable = true
+		kafkaConfig.Net.SASL.User = config.KafkaUsername
+		kafkaConfig.Net.SASL.Password = config.KafkaPassword
+		kafkaConfig.Net.SASL.Handshake = true
+
+		switch config.SASLMechanism {
+		case "PLAIN":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+		case "SCRAM-SHA-256":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+		case "SCRAM-SHA-512":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+		default:
+			return nil, fmt.Errorf("unsupported SASL mechanism: %s", config.SASLMechanism)
+		}
+
+	case "SASL_SSL":
+		kafkaConfig.Net.TLS.Enable = true
+		kafkaConfig.Net.SASL.Enable = true
+		kafkaConfig.Net.SASL.User = config.KafkaUsername
+		kafkaConfig.Net.SASL.Password = config.KafkaPassword
+		kafkaConfig.Net.SASL.Handshake = true
+
+		// Configure TLS
+		tlsConfig := &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: !config.SSLVerifyCerts,
+		}
+
+		if config.SSLVerifyCerts && config.SSLCALocation != "" {
+			caCert, err := os.ReadFile(config.SSLCALocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read CA certificate: %v", err)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		if config.SSLCertLocation != "" && config.SSLKeyLocation != "" {
+			cert, err := tls.LoadX509KeyPair(config.SSLCertLocation, config.SSLKeyLocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client certificate/key: %v", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+
+		kafkaConfig.Net.TLS.Config = tlsConfig
+
+		// Configure SASL
+		switch config.SASLMechanism {
+		case "PLAIN":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+		case "SCRAM-SHA-256":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+		case "SCRAM-SHA-512":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+		default:
+			return nil, fmt.Errorf("unsupported SASL mechanism: %s", config.SASLMechanism)
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported security protocol: %s", config.SecurityProtocol)
+	}
+
+	return sarama.NewClusterAdmin(strings.Split(config.KafkaBrokers, ","), kafkaConfig)
+}
+
+func createTopicIfNotExists(adminClient sarama.ClusterAdmin, topic string, partitions int, replication int) error {
+	topics, err := adminClient.ListTopics()
+	if err != nil {
+		return fmt.Errorf("failed to list topics: %w", err)
+	}
+
+	if _, exists := topics[topic]; exists {
+		log.Printf("Topic %s already exists", topic)
+		return nil
+	}
+
+	log.Printf("Creating topic %s with %d partitions and replication factor %d", topic, partitions, replication)
+
+	err = adminClient.CreateTopic(topic, &sarama.TopicDetail{
+		NumPartitions:     int32(partitions),
+		ReplicationFactor: int16(replication),
+	}, false)
+
+	if err != nil {
+		return fmt.Errorf("failed to create topic: %w", err)
+	}
+
+	log.Printf("Topic %s created successfully", topic)
+	return nil
+}
+
+func createProducer(config *config.Config) (sarama.SyncProducer, error) {
+	kafkaConfig := sarama.NewConfig()
+	kafkaConfig.Producer.RequiredAcks = sarama.WaitForAll
+	kafkaConfig.Producer.Retry.Max = 5
+	kafkaConfig.Producer.Return.Successes = true
+
+	switch config.SecurityProtocol {
+	case "PLAINTEXT":
+		// Default configuration is fine for plaintext
+
+	case "SSL":
+		kafkaConfig.Net.TLS.Enable = true
+		tlsConfig := &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: !config.SSLVerifyCerts,
+		}
+
+		if config.SSLVerifyCerts && config.SSLCALocation != "" {
+			caCert, err := os.ReadFile(config.SSLCALocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read CA certificate: %v", err)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		if config.SSLCertLocation != "" && config.SSLKeyLocation != "" {
+			cert, err := tls.LoadX509KeyPair(config.SSLCertLocation, config.SSLKeyLocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client certificate/key: %v", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+
+		kafkaConfig.Net.TLS.Config = tlsConfig
+
+	case "SASL_PLAINTEXT":
+		kafkaConfig.Net.SASL.Enable = true
+		kafkaConfig.Net.SASL.User = config.KafkaUsername
+		kafkaConfig.Net.SASL.Password = config.KafkaPassword
+		kafkaConfig.Net.SASL.Handshake = true
+
+		switch config.SASLMechanism {
+		case "PLAIN":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+		case "SCRAM-SHA-256":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+		case "SCRAM-SHA-512":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+		default:
+			return nil, fmt.Errorf("unsupported SASL mechanism: %s", config.SASLMechanism)
+		}
+
+	case "SASL_SSL":
+		kafkaConfig.Net.TLS.Enable = true
+		kafkaConfig.Net.SASL.Enable = true
+		kafkaConfig.Net.SASL.User = config.KafkaUsername
+		kafkaConfig.Net.SASL.Password = config.KafkaPassword
+		kafkaConfig.Net.SASL.Handshake = true
+
+		// Configure TLS
+		tlsConfig := &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: !config.SSLVerifyCerts,
+		}
+
+		if config.SSLVerifyCerts && config.SSLCALocation != "" {
+			caCert, err := os.ReadFile(config.SSLCALocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read CA certificate: %v", err)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		if config.SSLCertLocation != "" && config.SSLKeyLocation != "" {
+			cert, err := tls.LoadX509KeyPair(config.SSLCertLocation, config.SSLKeyLocation)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load client certificate/key: %v", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+
+		kafkaConfig.Net.TLS.Config = tlsConfig
+
+		// Configure SASL
+		switch config.SASLMechanism {
+		case "PLAIN":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypePlaintext
+		case "SCRAM-SHA-256":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+		case "SCRAM-SHA-512":
+			kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+		default:
+			return nil, fmt.Errorf("unsupported SASL mechanism: %s", config.SASLMechanism)
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported security protocol: %s", config.SecurityProtocol)
+	}
+
+	return sarama.NewSyncProducer(strings.Split(config.KafkaBrokers, ","), kafkaConfig)
+}
+
 func CreateTestTopicIfRequired(config *config.Config) error {
 	if !config.CreateTestTopic {
 		log.Println("Test topic creation is disabled")
 		return nil
 	}
 
-	// Create admin client
-	adminClient, err := createAdminClient(config.KafkaBrokers)
+	// Create admin client with security configuration
+	adminClient, err := createAdminClient(config)
 	if err != nil {
 		return fmt.Errorf("failed to create admin client: %w", err)
 	}
@@ -45,8 +283,8 @@ func CreateTestTopicIfRequired(config *config.Config) error {
 		return fmt.Errorf("failed to create test topic: %w", err)
 	}
 
-	// Create producer
-	producer, err := createProducer(config.KafkaBrokers)
+	// Create producer with security configuration
+	producer, err := createProducer(config)
 	if err != nil {
 		return fmt.Errorf("failed to create producer: %w", err)
 	}
@@ -57,14 +295,14 @@ func CreateTestTopicIfRequired(config *config.Config) error {
 }
 
 // SendSampleMessages sends sample messages to a topic
-func SendSampleMessages(brokers string, topic string, messageCount int) error {
-	producer, err := createProducer(brokers)
+func SendSampleMessages(config *config.Config, messageCount int) error {
+	producer, err := createProducer(config)
 	if err != nil {
 		return fmt.Errorf("failed to create producer: %w", err)
 	}
 	defer producer.Close()
 
-	return sendSampleMessages(producer, topic, messageCount)
+	return sendSampleMessages(producer, config.KafkaTopic, messageCount)
 }
 
 func sendSampleMessages(producer sarama.SyncProducer, topic string, messageCount int) error {
@@ -107,46 +345,4 @@ func sendSampleMessages(producer sarama.SyncProducer, topic string, messageCount
 
 	log.Printf("Finished producing %d messages", count)
 	return nil
-}
-
-func createAdminClient(brokers string) (sarama.ClusterAdmin, error) {
-	config := sarama.NewConfig()
-	config.Version = sarama.V2_6_0_0
-
-	return sarama.NewClusterAdmin(strings.Split(brokers, ","), config)
-}
-
-func createTopicIfNotExists(adminClient sarama.ClusterAdmin, topic string, partitions int, replication int) error {
-	topics, err := adminClient.ListTopics()
-	if err != nil {
-		return fmt.Errorf("failed to list topics: %w", err)
-	}
-
-	if _, exists := topics[topic]; exists {
-		log.Printf("Topic %s already exists", topic)
-		return nil
-	}
-
-	log.Printf("Creating topic %s with %d partitions and replication factor %d", topic, partitions, replication)
-
-	err = adminClient.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     int32(partitions),
-		ReplicationFactor: int16(replication),
-	}, false)
-
-	if err != nil {
-		return fmt.Errorf("failed to create topic: %w", err)
-	}
-
-	log.Printf("Topic %s created successfully", topic)
-	return nil
-}
-
-func createProducer(brokers string) (sarama.SyncProducer, error) {
-	config := sarama.NewConfig()
-	config.Producer.RequiredAcks = sarama.WaitForAll
-	config.Producer.Retry.Max = 5
-	config.Producer.Return.Successes = true
-
-	return sarama.NewSyncProducer(strings.Split(brokers, ","), config)
 }

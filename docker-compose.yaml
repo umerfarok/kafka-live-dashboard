@@ -1,44 +1,6 @@
 version: '3'
 
 services:
-  zookeeper:
-    image: 'bitnami/zookeeper:latest'
-    ports:
-      - '2181:2181'
-    environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
-    volumes:
-      - zookeeper_data:/bitnami/zookeeper
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "2181"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  kafka:
-    image: 'bitnami/kafka:latest' 
-    ports:
-      - '9092:9092'
-    depends_on:
-      zookeeper:
-        condition: service_healthy
-    environment:
-      - KAFKA_BROKER_ID=1
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      - KAFKA_CFG_LISTENERS=CLIENT://:9093,EXTERNAL://:9092
-      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafka:9093,EXTERNAL://localhost:9092
-      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=CLIENT
-      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
-    volumes:
-      - kafka_data:/bitnami/kafka
-    healthcheck:
-      test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   kafka-dashboard:
     build: 
       context: .
@@ -46,36 +8,38 @@ services:
     ports:
       - '5001:5001'
       - '3000:3000'
-    depends_on:
-      kafka:
-        condition: service_healthy
     environment:
-      - KAFKA_BROKERS=kafka:9093
+      # Basic Kafka Configuration
+      - KAFKA_BROKERS=${KAFKA_BROKERS:-localhost:9092}
       - KAFKA_TOPIC=${KAFKA_TOPIC:-test-topic}
-      - KAFKA_GROUP_ID=my-group
-      - KAFKA_OFFSET=latest
+      - KAFKA_GROUP_ID=${KAFKA_GROUP_ID:-my-group}
+      - KAFKA_OFFSET=${KAFKA_OFFSET:-latest}
+      
+      # HTTP Configuration
       - HTTP_PORT=5001
       - HTTP_READ_TIMEOUT=10
       - HTTP_WRITE_TIMEOUT=10
       - HTTP_IDLE_TIMEOUT=10
-      - ZOOKEEPER_NODES=zookeeper:2181
-      - CREATE_TEST_TOPIC=${CREATE_TEST_TOPIC:-true}
+      
+      # AWS MSK Configuration
+      - AWS_REGION=${AWS_REGION:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      
+      # Kafka Security Configuration
+      - KAFKA_USERNAME=${KAFKA_USERNAME:-}
+      - KAFKA_PASSWORD=${KAFKA_PASSWORD:-}
+      - USE_SASL=${USE_SASL:-false}
+      - USE_SSL=${USE_SSL:-false}
+      - SSL_CA_LOCATION=${SSL_CA_LOCATION:-}
+      - SSL_CERT_LOCATION=${SSL_CERT_LOCATION:-}
+      - SSL_KEY_LOCATION=${SSL_KEY_LOCATION:-}
+      - SASL_MECHANISM=${SASL_MECHANISM:-SCRAM-SHA-512}
+      
+      # Frontend Configuration
       - VITE_API_URL=http://localhost:5001
     volumes:
       - ./live-view-webapp:/app/frontend
       - ./static:/app/static
-
-  create-topics:
-    image: bitnami/kafka:latest
-    depends_on:
-      kafka:
-        condition: service_healthy
-    command: >
-      bash -c "
-        kafka-topics.sh --create --if-not-exists --bootstrap-server kafka:9093 --partitions 1 --replication-factor 1 --topic ${KAFKA_TOPIC:-test-topic}
-        echo Created topic ${KAFKA_TOPIC:-test-topic}
-      "
-
-volumes:
-  zookeeper_data:
-  kafka_data:
+      # Mount SSL certificates if needed
+      - ${SSL_CERTS_PATH:-./certs}:/app/certs

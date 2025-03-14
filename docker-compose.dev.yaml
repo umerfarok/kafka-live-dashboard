@@ -1,0 +1,72 @@
+version: '3'
+
+services:
+  zookeeper:
+    image: 'bitnami/zookeeper:latest'
+    ports:
+      - '2181:2181'
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      - kafka-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: 'bitnami/kafka:latest'
+    ports:
+      - '9092:9092'
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    networks:
+      - kafka-net
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka-dashboard:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '5001:5001'
+      - '3000:3000'
+    environment:
+      - KAFKA_BROKERS=kafka:9092
+      - ZOOKEEPER_NODES=zookeeper:2181
+      - KAFKA_TOPIC=test-topic
+      - KAFKA_GROUP_ID=dashboard-group
+      - KAFKA_OFFSET=latest
+      - HTTP_PORT=5001
+      - CREATE_TEST_TOPIC=true
+      - HTTP_READ_TIMEOUT=10
+      - HTTP_WRITE_TIMEOUT=10
+      - HTTP_IDLE_TIMEOUT=10
+      - USE_SSL=false
+      - SECURITY_PROTOCOL=PLAINTEXT
+      - VITE_API_URL=http://localhost:5001
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - kafka-net
+    volumes:
+      - ./live-view-webapp:/app/frontend
+      - ./static:/app/static
+
+networks:
+  kafka-net:
+    driver: bridge

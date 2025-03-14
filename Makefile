@@ -1,84 +1,90 @@
-.PHONY: build run docker-build docker-run test clean frontend backend dev create-topic
+.PHONY: build run test clean cert dev-up dev-down docker-build docker-push prod-up prod-down aws-push
 
 # Default target
 all: build
 
-# Build the Go application
+# Build the Go backend
 build:
-	go build -o bin/kafka-dashboard
+	go build -o kafka-dashboard
 
-# Run the Go application
-run: build
-	./bin/kafka-dashboard
+# Run locally
+run:
+	go run .
 
-# Build the Docker image
-docker-build:
-	docker build -t kafka-live-dashboard .
-
-# Run using Docker Compose
-docker-run:
-	docker compose up -d
-
-# Run Docker Compose with logs
-docker-logs:
-	docker compose up
-
-# Stop Docker Compose
-docker-stop:
-	docker compose down
-
-# Test Go code
+# Run tests
 test:
-	go test -v ./...
+	go test ./...
 
 # Clean build artifacts
 clean:
-	rm -rf bin/
+	rm -f kafka-dashboard
+	rm -rf live-view-webapp/dist
 
-# Run frontend development server
-frontend:
-	cd live-view-webapp && npm install && npm run dev
+# Generate SSL certificates
+cert:
+	cd scripts && chmod +x generate-certs.sh && ./generate-certs.sh
 
-# Run backend development server
-backend:
-	go run main.go
+# Start development environment
+dev-up:
+	docker-compose -f docker-compose.dev.yaml up --build
 
-# Run both frontend and backend (requires tmux or multiple terminals)
-dev:
-	@echo "Starting backend server..."
-	@go run main.go & 
-	@echo "Starting frontend server..."
-	@cd live-view-webapp && npm install && npm run dev
+# Stop development environment
+dev-down:
+	docker-compose -f docker-compose.dev.yaml down
 
-# Create a test topic with sample data
-create-topic:
-	go run create-test-topic.go
+# Build Docker image
+docker-build:
+	docker build -t kafka-dashboard:latest .
 
-# Create a specific topic with parameters
-create-custom-topic:
-	@read -p "Topic name: " topic; \
-	read -p "Number of partitions (default: 3): " partitions; \
-	read -p "Replication factor (default: 1): " replication; \
-	read -p "Number of messages (default: 100): " messages; \
-	partitions=$${partitions:-3}; \
-	replication=$${replication:-1}; \
-	messages=$${messages:-100}; \
-	go run create-test-topic.go -topic $$topic -partitions $$partitions -replication $$replication -messages $$messages
+# Push to Docker Hub (replace with your username)
+docker-push:
+	@read -p "Enter Docker Hub username: " username; \
+	docker tag kafka-dashboard:latest $$username/kafka-dashboard:latest; \
+	docker push $$username/kafka-dashboard:latest
 
-# Show help
+# Production deployment
+prod-up:
+	docker-compose -f docker-compose.prod.yaml up -d
+
+prod-down:
+	docker-compose -f docker-compose.prod.yaml down
+
+# Push to AWS ECR
+aws-push:
+	@read -p "Enter AWS Region: " region; \
+	read -p "Enter AWS Account ID: " account; \
+	aws ecr get-login-password --region $$region | docker login --username AWS --password-stdin $$account.dkr.ecr.$$region.amazonaws.com; \
+	docker tag kafka-dashboard:latest $$account.dkr.ecr.$$region.amazonaws.com/kafka-dashboard:latest; \
+	docker push $$account.dkr.ecr.$$region.amazonaws.com/kafka-dashboard:latest
+
+# Setup development environment
+setup-dev:
+	go mod download
+	cd live-view-webapp && npm install --legacy-peer-deps
+
+# Start frontend development server
+frontend-dev:
+	cd live-view-webapp && npm run dev
+
+# Start backend development server
+backend-dev:
+	go run .
+
+# Update help target
 help:
-	@echo "Kafka Live Dashboard - Makefile Commands"
-	@echo "--------------------------------------"
-	@echo "make build             - Build the Go application"
-	@echo "make run               - Run the Go application"
-	@echo "make docker-build      - Build the Docker image"
-	@echo "make docker-run        - Run using Docker Compose in detached mode"
-	@echo "make docker-logs       - Run using Docker Compose with logs"
-	@echo "make docker-stop       - Stop Docker Compose services"
-	@echo "make test              - Run Go tests"
-	@echo "make clean             - Remove build artifacts"
-	@echo "make frontend          - Run frontend development server"
-	@echo "make backend           - Run backend development server"
-	@echo "make dev               - Run both frontend and backend"
-	@echo "make create-topic      - Create a test topic with sample data"
-	@echo "make create-custom-topic - Create a custom topic with parameters"
+	@echo "Available targets:"
+	@echo "  build        - Build the Go backend"
+	@echo "  run          - Run the application locally"
+	@echo "  test         - Run tests"
+	@echo "  clean        - Clean build artifacts"
+	@echo "  cert         - Generate SSL certificates"
+	@echo "  dev-up       - Start development environment with Docker"
+	@echo "  dev-down     - Stop development environment"
+	@echo "  docker-build - Build Docker image"
+	@echo "  docker-push  - Push to Docker Hub"
+	@echo "  aws-push     - Push to AWS ECR"
+	@echo "  prod-up      - Start production environment"
+	@echo "  prod-down    - Stop production environment"
+	@echo "  setup-dev    - Setup development environment"
+	@echo "  frontend-dev - Start frontend development server"
+	@echo "  backend-dev  - Start backend development server"

@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-dashboard-config
+data:
+  KAFKA_BROKERS: "kafka-broker1:9092,kafka-broker2:9092"
+  KAFKA_TOPIC: "test-topic"
+  KAFKA_GROUP_ID: "kafka-dashboard-group"
+  SECURITY_PROTOCOL: "SASL_SSL"
+  USE_SSL: "true"
+  USE_SASL: "true"
+  SASL_MECHANISM: "SCRAM-SHA-512"
+  SSL_VERIFY_CERTIFICATES: "true"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kafka-dashboard-secret
+type: Opaque
+data:
+  # Base64 encoded values
+  KAFKA_USERNAME: "your-username"
+  KAFKA_PASSWORD: "your-password"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-dashboard
+  template:
+    metadata:
+      labels:
+        app: kafka-dashboard
+    spec:
+      volumes:
+        - name: ssl-certs
+          secret:
+            secretName: kafka-ssl-certs
+      containers:
+        - name: kafka-dashboard
+          image: ghcr.io/umerfarok/kafka-live-dashboard:latest
+          ports:
+            - containerPort: 3000
+              name: http
+            - containerPort: 5001
+              name: api
+          envFrom:
+            - configMapRef:
+                name: kafka-dashboard-config
+            - secretRef:
+                name: kafka-dashboard-secret
+          volumeMounts:
+            - name: ssl-certs
+              mountPath: /app/certs
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5001
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-dashboard
+spec:
+  selector:
+    app: kafka-dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+    - name: api
+      port: 5001
+      targetPort: 5001
+  type: LoadBalancer

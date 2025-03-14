@@ -1,0 +1,53 @@
+version: '3'
+
+services:
+  kafka-dashboard:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '${PORT:-3000}:3000'
+      - '${BACKEND_PORT:-5001}:5001'
+    environment:
+      # Basic Kafka Configuration
+      - KAFKA_BROKERS=${KAFKA_BROKERS}
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-your-topic}
+      - KAFKA_GROUP_ID=${KAFKA_GROUP_ID:-kafka-dashboard-group}
+      - KAFKA_OFFSET=${KAFKA_OFFSET:-latest}
+      
+      # HTTP Configuration
+      - HTTP_PORT=5001
+      - HTTP_READ_TIMEOUT=${HTTP_READ_TIMEOUT:-30}
+      - HTTP_WRITE_TIMEOUT=${HTTP_WRITE_TIMEOUT:-30}
+      - HTTP_IDLE_TIMEOUT=${HTTP_IDLE_TIMEOUT:-60}
+      
+      # AWS MSK Configuration
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      
+      # Kafka Security Configuration
+      - KAFKA_USERNAME=${KAFKA_USERNAME}
+      - KAFKA_PASSWORD=${KAFKA_PASSWORD}
+      - USE_SASL=true
+      - USE_SSL=true
+      - SSL_CA_LOCATION=/app/certs/ca.crt
+      - SSL_VERIFY_CERTIFICATES=${SSL_VERIFY_CERTIFICATES:-true}
+      - SASL_MECHANISM=${SASL_MECHANISM:-SCRAM-SHA-512}
+      
+      # Frontend Configuration
+      - VITE_API_URL=http://${DOMAIN:-localhost}:5001
+    volumes:
+      - ${SSL_CERTS_PATH:-./certs}:/app/certs
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "10"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
